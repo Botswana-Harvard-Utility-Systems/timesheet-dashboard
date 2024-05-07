@@ -133,7 +133,6 @@ class EmployeeListBoardView(
     def get_queryset(self):
         usr_groups = [g.name for g in self.request.user.groups.all()]
         qs = super().get_queryset()
-
         if self.request.GET.get('dept'):
             if 'HR' in usr_groups and self.request.GET.get('p_role') == 'HR':
                 qs = qs.filter(department__dept_name=self.request.GET.get('dept'))
@@ -144,7 +143,18 @@ class EmployeeListBoardView(
             except supervisor_cls.DoesNotExist:
                 pass
             else:
-                qs = qs.filter(Q(supervisor=supervisor_obj))  # | Q(supervisor_alt=supervisor_obj))
+                initial_supervisor_qs = qs.filter(Q(supervisor=supervisor_obj))  # | Q(supervisor_alt=supervisor_obj))
+                supervisees_lists = initial_supervisor_qs.values_list('email',
+                                                             flat=True).distinct()
+                for email in supervisees_lists:
+                    try:
+                        supervisee_object = supervisor_cls.objects.get(email=email)
+                    except supervisor_cls.DoesNotExist:
+                        pass
+                    else:
+                        supervisee_sub_qs = qs.filter(Q(supervisor=supervisee_object))
+                        initial_supervisor_qs = initial_supervisor_qs.union(supervisee_sub_qs)
+                qs = initial_supervisor_qs
         return qs
 
     def extra_search_options(self, search_term):
