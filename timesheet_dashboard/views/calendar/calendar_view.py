@@ -1,17 +1,21 @@
 import calendar
-from datetime import datetime
 from edc_base.utils import get_utcnow
 from edc_base.view_mixins import EdcBaseViewMixin
 from edc_dashboard.view_mixins import TemplateRequestContextMixin
 
 from django.apps import apps as django_apps
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http.response import HttpResponseRedirect
+from django.db import transaction
+from django.shortcuts import redirect
 from django.urls.base import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic.base import TemplateView
 
 from edc_navbar import NavbarViewMixin
+
+from timesheet.forms import MonthlyEntryForm
+from timesheet.forms.monthly_entry_form import DailyEntryFormSet
 
 from .timesheet_mixin import TimesheetMixin
 
@@ -34,58 +38,219 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
 
-    def post(self, request, *args, **kwargs):
-        # if this is a POST request we need to process the form data
-        year = kwargs.get('year')
-        month = kwargs.get('month')
-        if request.method == 'POST':
-            controller = request.POST.get('controller', '')
-            if controller:
-                if controller == 'calendar_picker':
-                    select_month = request.POST.get('select_month', '')
-                    select_year = request.POST.get('calendar_year', '')
-                    month = datetime.strptime(select_month,
-                                              "%B").month if select_month else month
-                    year = int(select_year) if select_year else year
-                else:
-                    year, month = self.navigate_table(controller, year, month)
-            elif request.POST.get('read_only') == '1' or request.POST.get(
-                    'timesheet_review'):
-                self.add_daily_entries(request, kwargs)
-                return HttpResponseRedirect(
-                    reverse('timesheet_dashboard:timesheet_listboard_url',
-                            kwargs={'employee_id': kwargs.get('employee_id')})
-                    + '?p_role=' + request.GET.get('p_role'))
-            else:
-                self.add_daily_entries(request, kwargs)
-            if request.POST.get('save_submit'):
-                return HttpResponseRedirect(
-                    reverse('timesheet_dashboard:timesheet_listboard_url',
-                            kwargs={'employee_id': kwargs.get('employee_id')})
-                    + '?p_role=' + request.GET.get('p_role'))
+    def get(self, request, *args, **kwargs):
+        year = int(kwargs.get('year'))
+        month = int(kwargs.get('month'))
+        employee_id = kwargs.get('employee_id')
+        redirect_url = self.canonical_redirect_if_picker(
+            request, employee_id, year, month)
 
-        return HttpResponseRedirect(
-            reverse('timesheet_dashboard:timesheet_calendar_table_url',
-                    kwargs={'employee_id': kwargs.get('employee_id'),
-                            'year': year,
-                            'month': month}))
+        if redirect_url:
+            return redirect_url
+
+        if self.is_future_month(year, month) and not self.ALLOW_FUTURE_MONTHS:
+            messages.info(
+                request,
+                'Future months are disabled. Showing current month instead.')
+            today = get_utcnow().date()
+            return redirect(
+                reverse('timesheet_dashboard:timesheet_calendar_table_url',
+                        kwargs={'employee_id': employee_id,
+                                'year': today.year,
+                                'month': today.month}))
+
+        return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        employee_id = kwargs.get('employee_id', None)
-        year = kwargs.get('year', '')
-        month = kwargs.get('month', '')
+        year = int(self.kwargs.get('year'))
+        month = int(self.kwargs.get('month'))
+        employee_id = self.kwargs.get('employee_id')
 
-        monthly_obj = self.get_monthly_obj(
-            datetime.strptime(f'{year}-{month}-1', '%Y-%m-%d'))
+        # Existing monthly if any (no creation on GET)
+        monthly_entry = kwargs.get('monthly_entry')
+        if monthly_entry is None:
+            monthly_entry = self.monthly_entry_model_cls.objects.filter(
+                employee=self.employee, month=self.construct_month_dt()).first()
+
+        if monthly_entry and not kwargs.get('formset'):
+            self.ensure_daily_placeholders(monthly_entry)
+            formset = DailyEntryFormSet(instance=monthly_entry)
+        else:
+            formset = kwargs.get('formset')
+            if monthly_entry and formset is None:
+                formset = DailyEntryFormSet(instance=monthly_entry)
+
+        # Build Mon->Sun calendar weeks as date objects (including spillover days)
+        cal = calendar.Calendar(firstweekday=0)
+        weeks = list(cal.monthdatescalendar(year, month))
+
+        # Map each in-month date to its form (if monthly entry exists)
+        forms_by_date = {}
+        if monthly_entry and formset:
+            for f in formset.forms:
+                forms_by_date[f.instance.day] = f
+
+        # Produce rows for the template: only keep dates that belong to this month, else None
+        calendar_rows = []
+        for week in weeks:
+            row = []
+            for d in week:
+                if d.month == month:
+                    row.append({'date': d, 'form': forms_by_date.get(d)})
+                else:
+                    row.append({'date': None, 'form': None})
+            calendar_rows.append(row)
+
+        weekday_headers = calendar.day_abbr
+
+        # Navigation helpers
+        prev_year, prev_month = self.add_months(year, month, -1)
+        next_year, next_month = self.add_months(year, month, +1)
+        prev_url = reverse('timesheet_dashboard:timesheet_calendar_table_url',
+                           kwargs={'employee_id': employee_id,
+                                   'year': prev_year,
+                                   'month': prev_month})
+        next_url = reverse('timesheet_dashboard:timesheet_calendar_table_url',
+                           kwargs={'employee_id': employee_id,
+                                   'year': next_year,
+                                   'month': next_month})
+
+        context.update({
+            'year': year,
+            'month': month,
+            'prev_url': prev_url,
+            'next_url': next_url,
+            'month_days': self.month_day_list(year, month),
+            'monthly_entry': monthly_entry,
+            'formset': formset,
+            'calendar_rows': calendar_rows,
+            'weekday_headers': weekday_headers,
+            'can_create_for_month': self.ALLOW_FUTURE_MONTHS or not self.is_future_month(year, month)})
+
+        # If POST injected form/formset/strict, keep them; otherwise defaults for GET
+        context.setdefault('strict', False)
+        if monthly_entry:
+            context.setdefault('form', MonthlyEntryForm(instance=monthly_entry))
+            context.setdefault('formset', DailyEntryFormSet(instance=monthly_entry))
+        else:
+            context.setdefault('form', MonthlyEntryForm())
+            context.setdefault('formset', None)
+
+        # Add extra context
+        context.update(self._build_extra_context())
+        return context
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        # if this is a POST request we need to process the form data
+        year = int(kwargs.get('year'))
+        month = int(kwargs.get('month'))
+        employee_id = kwargs.get('employee_id')
+
+        if 'start' in request.POST:
+            if self.is_future_month(year, month) and not self.ALLOW_FUTURE_MONTHS:
+                messages.error(
+                    request,
+                    'Cannot create or submit timesheets for future months.')
+                return redirect(
+                    reverse(
+                        'timesheet_dashboard:timesheet_calendar_table_url',
+                        kwargs={'employee_id': employee_id,
+                                'year': year,
+                                'month': month}))
+
+            # Get or create only when user explicitly posts
+            _mothly_entry, _ = self.get_or_create_monthly_obj()
+            messages.success(
+                request,
+                'Timesheet created. You can now enter your days.')
+            return redirect(
+                reverse(
+                    'timesheet_dashboard:timesheet_calendar_table_url',
+                    kwargs={'employee_id': employee_id,
+                            'year': year,
+                            'month': month}))
+
+        monthly_entry = self.get_monthly_obj()
+        if not monthly_entry:
+            # We do not expect to get to this point if monthly entry does
+            # not exist. Save and submit only appears for user when monthly
+            # entry exists.
+            messages.error(
+                request,
+                'Something went wrong. Please contact your administrator')
+            return redirect(
+                reverse(
+                    'timesheet_dashboard:timesheet_calendar_table_url',
+                    kwargs={'employee_id': employee_id,
+                            'year': year,
+                            'month': month}))
+
+        strict = ('submit' in request.POST)
+
+        # Defensive guard — if management fields missing, treat as a start/open
+        probe_prefix = DailyEntryFormSet(instance=monthly_entry).prefix
+        management_fields = (f"{probe_prefix}-TOTAL_FORMS",
+                             f"{probe_prefix}-INITIAL_FORMS")
+        if not all(k in request.POST for k in management_fields):
+            messages.info(
+                request,
+                'No changes submitted. Timesheet is open for editing.')
+            return redirect(
+                reverse(
+                    'timesheet_dashboard:timesheet_calendar_table_url',
+                    kwargs={'employee_id': employee_id,
+                            'year': year,
+                            'month': month}))
+
+        form = MonthlyEntryForm(request.POST, instance=monthly_entry)
+        formset = self.get_formset(instance=monthly_entry)
+
+        if form.is_valid() and formset.is_valid():
+            form.save()
+            formset.save()
+            if strict:
+                monthly_entry.status = 'submitted'
+                monthly_entry.submitted_datetime = get_utcnow()
+                monthly_entry.save(
+                    update_fields=['status', 'submitted_datetime'])
+                messages.success(
+                    request,
+                    'Timesheet submitted to Supervisor for review')
+            else:
+                messages.success(
+                    request,
+                    'Timesheet saved as draft')
+            return redirect(
+                reverse('timesheet_dashboard:timesheet_calendar_table_url',
+                        kwargs={'employee_id': employee_id,
+                                'year': year,
+                                'month': month}))
+        else:
+            # Re-render with errors using the same context pipeline
+            context = self.get_context_data(
+                monthly_entry=monthly_entry,
+                form=form,
+                formset=formset,
+                strict=strict)
+
+            return self.render_to_response(context)
+
+    def _build_extra_context(self):
         extra_context = {}
+
+        year = int(self.kwargs.get('year'))
+        month = int(self.kwargs.get('month'))
+        employee_id = self.kwargs.get('employee_id')
+
+        monthly_obj = self.get_monthly_obj()
+
         if self.request.GET.get('p_role') == 'Supervisor':
             extra_context = {'p_role': 'Supervisor',
                              'verified': True,
                              'read_only': True, }
-
-            # if (monthly_obj and monthly_obj.status != 'verified') or not monthly_obj:
 
             if monthly_obj and monthly_obj.status in ['rejected', 'approved']:
                 extra_context.update({'read_only': True})
@@ -114,52 +279,25 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
                 overtime_worked=monthly_obj.monthly_overtime,
                 comment=monthly_obj.comment,
                 timesheet_status=monthly_obj.get_status_display(),
+                timesheet_status_badge=monthly_obj.status_badge_color,
                 verified_by=monthly_obj.verified_by,
                 approved_by=monthly_obj.approved_by,
                 submitted_datetime=monthly_obj.submitted_datetime,
                 rejected_by=monthly_obj.rejected_by,
                 monthly_obj_job_title=monthly_obj_job_title
             )
-        else:
-            extra_context.update(
-                timesheet_status='New'
-            )
 
-        month_name = calendar.month_name[int(month)]
-        daily_entries_dict = self.get_dailyentries(int(year), int(month))
-        blank_days = self.get_blank_days(int(year), int(month))
-        no_of_weeks = self.get_number_of_weeks(int(year), int(month))
+        month_name = calendar.month_name[month]
+
         groups = [g.name for g in self.request.user.groups.all()]
 
         entry_types = self.entry_types()
 
-        try:
-            calendar_day = datetime.strptime(f'{year}-{month}-' + str(
-                get_utcnow().day), '%Y-%m-%d').date()
-        except ValueError:
-            calendar_day = datetime.strptime(
-                f'{year}-{month}-' + str(calendar.monthrange(
-                    int(year), int(month))[-1]), '%Y-%m-%d').date()
-
-        if calendar_day > get_utcnow().date():
-            entry_types = tuple(
-                x for x in entry_types if
-                x[0] not in ['RH', 'SL', 'CL', 'FH', ])
-        context.update(employee_id=employee_id,
-                       week_titles=calendar.day_abbr,
+        context = dict(employee_id=employee_id,
                        month_name=month_name,
-                       curr_month=month,
-                       year=year,
-                       daily_entries_dict=daily_entries_dict,
-                       prefilled_rows=len(
-                           daily_entries_dict.keys()) if daily_entries_dict else 0,
-                       blank_days_range=range(blank_days),
-                       blank_days=str(blank_days),
-                       last_day=calendar.monthrange(int(year), int(month))[1],
-                       no_of_weeks=no_of_weeks,
                        groups=groups,
                        user_employee=self.user_employee,
-                       holidays=self.get_holidays(int(year), int(month)),
+                       holidays=self.get_holidays(year, month),
                        entry_types=entry_types,
                        month_names=list(calendar.month_name)[1:13],
                        is_security=self.is_security,

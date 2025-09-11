@@ -4,222 +4,156 @@
 {% load timesheet_dashboard_extras %}
 {% load edc_dashboard_extras %}
 
+{% block extra-css %}
+<style>
+	.md-card {
+	  background: var(--bs-body-bg);
+	  border-radius: 4px;
+	  box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 2px 20px rgba(0,0,0,.06);
+	  border: 1px solid rgba(0,0,0,.06);
+	  overflow: hidden;
+	}
+	.md-card > .card-body { padding: 1rem 1.25rem; }
+	.table-md td, .table-md th { padding: .6rem .70rem; }
+	
+	@media (prefers-color-scheme: dark) {
+	  .md-card { 
+	  	border-color: rgba(255, 255, 255, .08);
+	  }
+	}
+</style>
+
+{% endblock %}
+
 {% block main %}
 
-<div id="div-home-right" class="col-md-9">
- <!-- start listboard main block-->
- <div class="panel-group">
-  <div class="panel panel-{{ listboard_panel_style }}">
-   <div class="panel-heading">
-
-    <i class="{{ listboard_fa_icon }} fa-2x"></i>
-
-    <!-- begin search form -->
-    <span class="pull-right">
-      {% block listboard_search_form %}
-        {% include 'timesheet_dashboard/search_form.html' %}
-      {% endblock listboard_search_form %}
-    </span>
-    <!-- end search form -->
-
-    {% block listboard_panel %}
-
-    {% if timesheet_add_url %}
-    <a id="btn-dashboard" class="btn btn-sm btn-default" role="button"
-     		title="Add Timesheet" href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' employee_id  curr_year curr_month%}">
-     		<i class="fa fa-plus fa-sm"></i> Add Timesheet
-     	</a>
-     {% endif %}
-    {% if p_role == 'HR' %}
-    	<a id="back_employee" title="view_employees" class="btn btn-sm btn-default" role="button" 
-        href="{% url  'timesheet_dashboard:timesheet_employee_listboard_url' %}?p_role=HR">
-        <i class="fa fa-reply fa-sm"></i> Employees
-         </a>
-    {% elif p_role == 'Supervisor' %}
-    	<a id="back_employee" title="view_employees" class="btn btn-sm btn-default" role="button" 
-        href="{% url  'timesheet_dashboard:timesheet_employee_listboard_url' %}?p_role=Supervisor">
-        <i class="fa fa-reply fa-sm"></i> Supervisees
-         </a>
-    {% endif %}
-    
-    	
-    {% endblock listboard_panel %}
-
-   </div> <!--end panel heading -->
-
-   <!-- begin table -->
-   <div class="table table-responsive">
-    <table class="table table-condensed table-hover small">
-     <thead>
-
-      {% block listboard_table_header %}
-      <!-- begin results header -->
-       <th>#</th>
-       <th></th>
-       {% if p_role == 'HR' or p_role == 'Supervisor' %}
-       <th>Name </th>
-       {% endif %}
-       <th>Month</th>
-       <th>Duration</th>
-       <th>Status</th>
-       <th>Submitted</th>
-       <th>Approved By</th>
-       <th>Verified By</th>
-       <!-- end results header -->
-	  {% endblock listboard_table_header %}
-
-      </thead><tbody>
-
-      {% block listboard_table_body %}
-
-      {% for result in results %}
-        <tr> 
-        
-         <td>{{ forloop.counter }}</td>
-		 {% block listboard_table_button_column %}
-		   <td style="white-space: nowrap">
-		   <div class="btn-group">
-		   {% if timesheet_add_url %}
-		      {% if result.status == 'new'%}
-				  <a title="Edit timesheet" role="button" class="btn btn-success btn-sm" href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' employee_id  result.year result.month %}">
-				     <i class="fa fa-edit"></i> Edit Timesheet
-				  </a>
-			  {% endif %}
-
-			     {% submit_timesheet_button result %}
-			{% endif %}
-
-		   {% if p_role == 'HR' or p_role == 'Supervisor' %}
-		   	  {% if result.status == 'rejected' %}
-		   	  	  <a id="submit_timesheet_{{employee_id}}"  title="View Timesheet"  data-toggle="tooltip"
-				    data-placement="right" class="btn btn-danger btn-sm" href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' result.employee.identifier  result.year result.month %}?p_role={{p_role}}" >
-			  {% elif result.status == 'submitted' %}
-			      <a id="submit_timesheet_{{employee_id}}"  title="View Timesheet"  data-toggle="tooltip"
-				    data-placement="right" class="btn btn-info btn-sm" href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' result.employee.identifier  result.year result.month %}?p_role={{p_role}}" >
-			  {% else %}
-		   	    <a id="submit_timesheet_{{employee_id}}"  title="View Timesheet"  data-toggle="tooltip"
-				  data-placement="right" class="btn btn-success btn-sm" href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' result.employee.identifier  result.year result.month %}?p_role={{p_role}}" >
-			  {% endif %} 
-				View Timesheet</a>
-		   {% endif %}
-
-		   </div>
-		   </td>
-		 {% endblock listboard_table_button_column %}
-			
-		{% block listboard_table_columns %}
-		{% if p_role == 'HR' or p_role == 'Supervisor' %}
-         <td>{{result.object.employee.first_name}} {{result.object.employee.last_name}}</td>
-         {% endif %}
-		 <td >{{ result.month|month_name }}-{{ result.year }}</td>
-		 <td>{{ result.object.total_hours }}</td>
-		 <th>{{ result.timesheet_status }}</th>
-		 <th>{{ result.object.submitted_datetime|date:"SHORT_DATETIME_FORMAT" }}</th>
-		 <th>{{ result.approved_by }}</th>
-		 <th>{{ result.verified_by }}</th>
-			
-		{% endblock listboard_table_columns %}
-		</tr>
-    
-     {% endfor %}
-
-    {% endblock listboard_table_body %}
-
-    </tbody></table>
-
-	<!-- begin spacer rows -->
-	<table>
-	<tr><td>&nbsp;</td></tr>
-	<tr><td>&nbsp;</td></tr>
-	<tr><td>&nbsp;</td></tr>
-	<tr><td>&nbsp;</td></tr>
-	<tr><td>&nbsp;</td></tr>
-	</table>
-	<!-- end spacer rows -->
-
-   </div><!-- end table -->
-
-{% paginator_row %}
-
-</div>  <!--end panel -->
-</div> <!--end panel-group -->
-<!-- end listboard main block -->
-
-</div>
-
- <div id="div-home-right" class="col-md-3">
-
- 	<div class="panel-group" id="accordion">
-
-	   </div>
-
-	<div class="panel-group" id="accordion">
-
-		{% if employee_id %}
-		<div class="panel panel-default">
-	      <div class="panel-heading">
-	      	<h6 class="panel-title">
-	              <a id="demoraphicss-panel-title" data-toggle="collapse" data-parent="#accordion" href="#demographics-panel">Demographics {{employee_id}}<span class="caret"></span></a>
-	          </h6>
-	      </div>
-	      <div id="demographics-panel" class="panel-collapse collapse in">
-	      		<!-- {% include 'timesheet_dashboard/demographics.html' %} -->
-	      		{% demographics employee_id %}
-
-	      </div> 
-	   </div>
-	   {% endif %}
-
- 	  {% if 'HR' in groups %}
- 		<div class="panel panel-default">
-	      <div class="panel-heading">
-	          <h6 class="panel-title">
-	              <a href="{% url  'timesheet_dashboard:timesheet_listboard_url' %}?p_role=HR" > Employee Timesheets </a>
-	          </h6>
-	      </div>
-
-	    </div>
+<div class="row g-3">
+  <!-- Main table -->
+  <div class="col-12 col-lg-9">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+    	<div>
+      		<h1 class="h4 mb-0">My Timesheets</h1>
+      		<nav aria-label="breadcrumb" class="small">
+	          <ol class="breadcrumb mb-0">
+	            <li class="breadcrumb-item"><a href="{% url 'timesheet:timesheet_home_url' %}">Timesheet Dashboard</a></li>
+	            <li class="breadcrumb-item active">My Timesheets</li>
+	          </ol>
+	        </nav>
+        </div>
+        {% if timesheet_add_url %}
+	    	<a id="btn-dashboard" class="btn btn-sm btn-outline-primary" role="button"
+	     		title="Add Timesheet" href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' employee_id  curr_year curr_month%}">
+	     		<i class="bi bi-plus-circle"></i> Add Timesheet
+	     	</a>
 	    {% endif %}
+        {% block listboard_search_form %}
+        	{% include 'timesheet_dashboard/search_form.html' %}
+      	{% endblock listboard_search_form %}
+    </div>
 
-		{% if 'Supervisor' in groups %}
-		<div class="panel panel-default">
-	      <div class="panel-heading">
-	          <h6 class="panel-title">
-	              <a href="{% url 'timesheet_dashboard:timesheet_listboard_url' %}?p_role=Supervisor" > Supervisees Timesheets </a>
-	          </h6>
-	      </div>
-
-	    </div>
-
-       	{% endif %}
-
-       	{% if 'HR' in groups %}
-       	  <div class="panel panel-default">
-	      <div class="panel-heading">
-	          <h6 class="panel-title">
-	              <a id="departments-panel-title" data-toggle="collapse" data-parent="#accordion" href="#departments-panel">Departments <span class="caret"></span></a>
-	          </h6>
-	      </div>
-	      <div id="departments-panel" class="panel-collapse collapse">
-	      		<ul>
-	      		{% for dept in departments %}
-	      		   <li> <a href="{% url 'timesheet_dashboard:timesheet_listboard_url' %}?dept={{dept}}&p_role=HR" > {{dept}} </a> </li>
-	      		{% endfor %}
-	      		</ul>
-	      </div> 
-	      </div>
-
-	    {% endif %}
-	    <div class="panel panel-default">
-	      <div class="panel-heading">
-	          <h6 class="panel-title">
-	              <a href="{% url  'timesheet_dashboard:timesheet_listboard_url' %}?employee_id={{employee.identifier}}" > My Timesheets </a>
-	          </h6>
-	      </div>
-	   </div>
-
-
+	<div class="md-card">
+		<div class="card-body p-0">
+    		<div class="table-responsive">
+      			<table class="table table-hover small align-middle table-sm">
+        			<thead class="table-primary">
+        			{% block listboard_table_header %}
+        				<tr>
+				          <th>#</th>
+				          <th></th>
+				          {% if p_role == 'HR' or p_role == 'Supervisor' %}
+						  	<th>Name </th>
+						  {% endif %}
+				          <th>Month</th>
+						  <th>Duration</th>
+						  <th>Status</th>
+						  <th>Submitted</th>
+						  <th>Approved By</th>
+						  <th>Verified By</th>
+						</tr>
+	   				{% endblock listboard_table_header %}
+					</thead>
+        			<tbody>
+        			{% block listboard_table_body %}
+        	 			{% for result in results %}
+			        	 <tr>
+			        	 	<td>{{ forloop.counter }}</td>
+			        	 	{% block listboard_table_button_column %}
+			        	 		<td>
+			        	 			<div class="btn-group" role="group" aria-label="Timesheet Links">
+			        	 			{% if timesheet_add_url %}
+			        	 				{% submit_timesheet_button result %}
+			        	 			{% endif %}
+			        	 			
+			        	 			{% if p_role == 'HR' or p_role == 'Supervisor' %}
+			        	 				{% if result.status == 'rejected' %}
+			        	 				<a 	id="submit_timesheet_{{employee_id}}"
+			        	 					title="View Timesheet"
+			        	 					data-toggle="tooltip"
+			        	 					data-placement="right"
+			        	 					class="btn btn-danger btn-sm"
+			        	 					href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' result.employee.identifier  result.year result.month %}?p_role={{p_role}}">
+						  				{% elif result.status == 'submitted' %}
+						  				<a 	id="submit_timesheet_{{employee_id}}"
+						  					title="View Timesheet"
+						  					data-toggle="tooltip"
+							    			data-placement="right"
+							    			class="btn btn-info btn-sm"
+							    			href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' result.employee.identifier  result.year result.month %}?p_role={{p_role}}">
+						  				{% else %}
+						  				<a 	id="submit_timesheet_{{employee_id}}"
+						  					title="View Timesheet"
+						  					data-toggle="tooltip"
+						  					data-placement="right"
+						  					class="btn btn-success btn-sm"
+						  					href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' result.employee.identifier  result.year result.month %}?p_role={{p_role}}">
+						  				{% endif %} 
+						  				View Timesheet</a>
+									{% endif %}
+									</div>
+			        	 		</td>
+			        	 	{% endblock listboard_table_button_column %}
+			
+			        	 	{% block listboard_table_columns %}
+			        	 		{% if p_role == 'HR' or p_role == 'Supervisor' %}
+			        	 		<td>{{result.object.employee.first_name}} {{result.object.employee.last_name}}</td>
+			        	 		{% endif %}
+			        	 		<td>{{ result.month|month_name }}-{{ result.year }}</td>
+			        	 		<td>{{ result.object.total_hours }}</td>
+			        	 		<td>{{ result.timesheet_status }}</td>
+			        	 		<td>{{ result.object.submitted_datetime|date:"SHORT_DATETIME_FORMAT" }}</td>
+			        	 		<td>{{ result.approved_by }}</td>
+			        	 		<td>{{ result.verified_by }}</td>
+							{% endblock listboard_table_columns %}
+			          	</tr>
+          				{% empty %}
+			          	<tr>
+			          		<td colspan="9" class="text-center text-secondary">No timesheets found.</td>
+			          	</tr>
+          				{% endfor %}
+					{% endblock listboard_table_body %}
+        			</tbody>
+      			</table>
+			</div>
+  		</div>
+  		<div class="card-footer d-flex flex-column align-items-center">
+  			{% paginator_row %}
+      	</div>
+    </div>
+ </div>
+ <!-- Side panel with employee details (visible on lg+, offcanvas on mobile) -->
+ <div class="col-12 col-lg-3 d-none d-lg-block">
+  	<div class="md-card h-100 sticky-lg-top" style="top: 1rem;">
+      <div class="card-body">
+        <h5 class="card-title d-flex justify-content-between align-items-center">
+        	<span>Employee Details</span>
+        	{% if 'Supervisor' in groups %}
+        		<a href="{% url 'timesheet_dashboard:timesheet_listboard_url' %}?p_role=Supervisor" class="btn btn-sm btn-outline-secondary">Supervisees</a>
+        	{% endif %}
+        </h5>
+        {% demographics employee_id %}
+      </div>
+  </div>
 </div>
-</div>
+
 
 {% endblock main %}

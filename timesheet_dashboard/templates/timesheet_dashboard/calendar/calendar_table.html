@@ -4,428 +4,384 @@
 {% load edc_base_extras edc_admin_modify %}
 {% load i18n admin_urls %}
 
-{% block extra-styles %}
-    <link type="text/css" rel="stylesheet"
-          href="{% static 'timesheet_dashboard/css/calendar_table.css' %}">
-{% endblock extra-styles %}
-{% block extra-scripts %}
-    <script type="text/javascript" charset="utf8"
-            src="{% static 'timesheet_dashboard/js/calendar_table.js' %}"></script>
+{% block title %}Timesheet Calendar{% endblock %}
+{% block extra-css %}
+  <style>
+    /* Calendar grid styles */
+    .calendar-toolbar { gap: .5rem; }
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid rgba(0,0,0,.08); border-radius: 5px; overflow: hidden; }
+    .calendar-grid .cal-head { background: var(--bs-light); font-weight: 600; text-transform: uppercase; letter-spacing: .02em; font-size: .8rem; padding: .5rem .75rem; border-right: 1px solid rgba(0,0,0,.06); }
+    .calendar-grid .cal-head:last-child { border-right: 0; }
+    .cal-day { min-height: 8rem; border-right: 1px solid rgba(0,0,0,.06); border-top: 1px solid rgba(0,0,0,.06); background: var(--bs-body-bg); position: relative; }
+    .cal-day:nth-child(7n) { border-right: 0; }
+    .cal-date {color: var(--bs-secondary); font-size: .8rem; font-weight: 600; padding: .2rem; background-color: var(--bs-light); }
+    .cal-body { padding: 1.25rem .75rem .75rem .75rem; display: flex; flex-direction: column; gap: .25rem; }
+    .cal-day.is-today { background: rgba(13,110,253,.035); box-shadow: inset 0 0 0 2px rgba(13,110,253,.15); }
+    .cal-day.is-outside { background: rgba(0,0,0,.02); color: var(--bs-secondary); }
+    .cal-day.cell-error {
+	  border-color: #b00020;
+	  box-shadow: 0 0 0 2px rgba(176,0,32,.06); }
+    .cal-chip { display: inline-flex; align-items: center; padding: .15rem .5rem; border-radius: 999px; font-size: .75rem; background: var(--bs-primary-bg-subtle); }
+    .cal-chip .bi { font-size: .9rem; margin-right: .25rem; }
+    .calendar-legend .badge { font-size: .7rem; }
+    .errors { color:#b00020; font-size:.9rem; grid-column:1 / -1; }
+    .is-error {border: 1px solid rgba(255, 0, 0, 0.3); }
+    @media (max-width: 768px) { .cal-day { min-height: 6.5rem; } }
+  </style>
 {% endblock %}
 
 {% block main %}
-
-    {% if not review and not verify and not verified %}
-        <div class="row controls" style="display:inline;">
-            <div class="buttons" style="float:left;  margin-left:17px;">
-                <form method='POST' id="controlForm"
-                      action="{% url 'timesheet_dashboard:timesheet_calendar_table_url' employee_id year curr_month %}?p_role={{ p_role }}"
-                      name="timesheet">
-                    {% csrf_token %}
-                    <input id='controller' type='hidden' name='controller'/>
-                    <a id="prevMonth" type="button" class="btn btn-default"><i
-                            class="glyphicon glyphicon-chevron-left"></i></a>
-
-                    <kbd>{{ month_name }} {{ year }} </kbd>
-                    <a id="nextMonth" type="button" class="btn btn-default"><i
-                            class="glyphicon glyphicon-chevron-right"></i></a>
-
-
-                </form>
-            </div>
-
+<div class="row g-3">
+  <!-- Main column -->
+  <div class="col-12 col-lg-9">
+    <!-- Toolbar -->
+    <div class="md-card mb-3">
+      <div class="card-body d-flex flex-wrap align-items-center justify-content-between calendar-toolbar">
+        <div class="d-flex align-items-center gap-2">
+          <a {% if p_role %}
+          		href="{% url timesheet_listboard_url %}?p_role={{ p_role }}"
+          	 {% else %}
+          	 	href="{% url timesheet_listboard_url employee_id %}"
+          	 {% endif %}
+          	class="btn btn-outline-info btn-sm">
+          		<i class="bi bi-arrow-left"></i> Back to list
+          </a>
+          <h1 class="h5 mb-0">{{ month_name }} {{ year }}</h1>
         </div>
-    {% endif %}
-    <div class="col-md-9" style="padding-right:0; margin-top:10px;">
-        <div class="well well-sm">
-            <div id="entry_key" style="text-align:center; color: gray">
-                <h9><b>RH</b> = Regular Hours, <b>H</b> = Holiday, <b>SL</b> = Sick Leave,
-                    <b>AL</b> = Annual Leave, <b>FH</b> = Feeding Hour
-                </h9>
-                <br>
-                <b>(ML/PL)</b> = Maternity/Paternity Leave, <b>STL</b> = Study Leave, <b>CL</b>
-                = Compassionate Leave {% if is_security %}, <b>OD</b> = Off Day{% endif %}
-                </h9>
-            </div>
-        </div>
-        <form method='POST' id="timesheet_form"
-              action="{% url 'timesheet_dashboard:timesheet_calendar_table_url' employee_id year curr_month %}?p_role={{ p_role }}"
-              name="timesheet">
-            {% csrf_token %}
-            <table class="table table-striped" id="calendarTable">
-                <thead>
-                <tr>
-                    {% for title in week_titles %}
-                        <th style="text-align:center; color:#808080" class="col-md-1">
-                            {{ title }} <br/>
-                        </th>
-                    {% endfor %}
-                    <th colspan="18" class="col-md-1">Total</th>
-                </tr>
-                </thead>
-                <tbody style="background-color:#fff;">
-                {{ entry_types|json_script:"entry_types"}}
-                {{ is_security|json_script:"is_security"}}
-                {% for key, values in daily_entries_dict.items %}
-                    <tr>
-                        <!--   <td> <input id='tasks' type='text' class='form-control form-control-sm' name='tasks' readonly /></td> -->
-                        {% if forloop.first %}
-                            {% for b in blank_days_range %}
-                                <td><input class='blank_cells' type='hidden' value=''/>
-                                </td>
-                            {% endfor %}
-
-                        {% endif %}
-                        {% for entry in values %}
-                            <td><h5 id='day-{{ entry.day |date:"j"}}-title'
-                                    style='text-align:center;'>
-                                {{ entry.day |date:'j'}} </h5>
-                                <div class="input-group" style="text-align:center;">
-
-                                    <input id='{{ entry.day |date:"j"}}-duration-'
-                                           type='number'
-                                           class='form-control'
-                                           name='{{ entry.day |date:"j"}}-duration'
-                                           value="{{ entry.duration }}" max='24' min='0'
-                                            {% if review or verify or read_only %}
-                                           readonly {% endif %}
-                                           style="width:40px; padding:4px 4px; border-right:0;"/>
-
-                                    <select id='{{ entry.day |date:"j"}}-entry_type'
-                                            name='{{ entry.day |date:"j"}}-entry_type'
-                                            class="btn btn-default btn-sm dropdown-toggle form-control form-control-sm"
-                                            style='width:40px; padding:0px;'>
-
-                                        {% if is_security %}
-                                            {% for e in entry_types %}
-                                                <option value={{ e.0 }} {% if e.0 == entry.entry_type %} selected {% endif %}>{{ e.0 }}</option>
-                                            {% endfor %}
-                                        {% elif review %}
-                                            <option value={{ entry.entry_type }} selected>{{ entry.entry_type }}</option>
-                                        {% else %}
-                                            {% if entry.day|is_holiday and is_security %}
-                                                <option value='H' selected> H</option>
-                                            {% elif entry.day|is_holiday and not is_security %}
-                                                <option value='WE' selected> WE</option>
-                                            {% elif entry.day|is_weekend %}
-                                                <option value='WE' selected> WE</option>
-                                            {% else %}
-                                                {% for e in entry_types %}
-                                                    <option value={{ e.0 }} {% if e.0 == entry.entry_type %} selected {% endif %}>{{ e.0 }}</option>
-                                                {% endfor %}
-                                            {% endif %}
-                                        {% endif %}
-                                    </select>
-                                </div>
-                                <input id='{{ entry.day |date:"j"}}-day' type='hidden'
-                                       value='{{ entry.day|date:"Y-m-d"}}'
-                                       name='{{ entry.day |date:"j"}}-day'/>
-                                <input id='{{ entry.day |date:"j"}}-row' type='hidden'
-                                       value={{ entry.row }} name='
-                                       {{ entry.day |date:"j"}}-row'/>
-                            </td>
-                        {% endfor %}
-                        <td colspan="17"></td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-
-                <tfoot>
-
-                <tr>
-                    {% if review %}
-
-                        <td colspan="25">
-                            <div class="buttons" style="float:right">
-                                <button type="button" class="btn btn-danger"
-                                        id="reject-record">
-                                    <i class="glyphicon glyphicon-remove"></i> Reject
-                                </button>
-                                <button type="button" class="btn btn-success"
-                                        id="approve-record">
-                                    <i class="glyphicon glyphicon-ok"></i> Approve
-                                </button>
-
-                            </div>
-                        </td>
-
-                    {% elif verify %}
-                        <td colspan="25">
-                            <div class="buttons" style="float:right">
-                                <button type="button" class="btn btn-danger"
-                                        id="reject-record">
-                                    <i class="glyphicon glyphicon-remove"></i> Reject
-                                </button>
-                                <button type="button" class="btn btn-success"
-                                        id="verify-record" {% if timesheet_status != 'Approved' %}disabled{% endif %}>
-                                    <i class="glyphicon glyphicon-ok"></i> Verify
-                                </button>
-                            </div>
-                        </td>
-
-                    {% else %}
-
-                        <td colspan="25">
-                            <input name="curr_month" id="curr_month" type="hidden"
-                                   value="{{ curr_month }}"/>
-                            <input name="year" id="year" type="hidden"
-                                   value="{{ year }}"/>
-                            <input name="last_day" id="last_day" type="hidden"
-                                   value={{ last_day }}/>
-                            <input name="holidays" id="holidays" type="hidden"
-                                   value={{ holidays }}/>
-                            <input name="no_of_weeks" id="no_of_weeks" type="hidden"
-                                   value="{{ no_of_weeks }}"/>
-                            <input name=prefilled_rows id="prefilled_rows" type="hidden"
-                                   value="{{ prefilled_rows }}"/>
-                            <input name="blank_days" id="blank_days" type="hidden"
-                                   value="{{ blank_days }}"/>
-
-                            <div class="buttons" style="float:right">
-                                {% if not read_only %}
-                                    <button type="button" class="btn btn-info"
-                                            id="add-row">
-                                        <i class="glyphicon glyphicon-plus"></i> New Row
-                                    </button>
-                                    <button type="button" class="btn btn-info"
-                                            id="auto_fill">
-                                        <i class="glyphicon glyphicon-plus"></i> Autofill
-                                    </button>
-                                    <button type="submit" class="btn btn-warning"
-                                            id="save-record">
-                                        <i class="glyphicon glyphicon-save"></i> Save
-
-                                    </button>
-                                    <button type="button" class="btn btn-success"
-                                            id="save-submit-record" style="display:none;">
-                                        <i class="glyphicon glyphicon-save"></i> Save and
-                                        Submit
-                                    </button>
-                                {% else %}
-                                    {% if timesheet_status == 'Rejected' %}
-                                        <a type="button" class="btn btn-danger" disabled>
-                                            {{ timesheet_status }}
-                                        </a>
-                                    {% else %}
-                                        <a type="button" class="btn btn-success" disabled>
-                                            {{ timesheet_status }}
-                                        </a>
-                                    {% endif %}
-                                {% endif %}
-                            </div>
-                        </td>
-                    {% endif %}
-
-                </tfoot>
-
-            </table>
-        </form>
+        
+        {# Month navigation #}
+        <div class="nav-bar d-flex flex-wrap align-items-end gap-2">
+        	
+        	<a class="btn btn-sm btn-outline-primary" href="{{ prev_url }}" title="Previous month">
+        		<i class="bi bi-chevron-left"></i>
+        	</a>
+        
+	        <form method="get" class="d-flex flex-wrap align-items-end gap-2">
+	          <div>
+	            <label class="form-label small mb-1">Jump to</label>
+	            <input  type="month"
+	            		name="ym"
+	            		value="{{ year }}-{{ month|stringformat:'02d' }}"
+	            		onchange="this.form.submit()"
+	            		class="form-control form-control-sm" />
+	          </div>
+	        </form>
+	        
+	        <a class="btn btn-sm btn-outline-primary" href="{{ next_url }}" title="Next month">
+	        	<i class="bi bi-chevron-right"></i>
+	        </a>
+	     </div>
+      </div>
     </div>
-    <div class="col-md-3" style="float:right; ">
-        <br/>
-        <div class="panel-group" id="accordion">
-            <div class="panel panel-primary">
-                <div class="panel-heading">
-                    <h6 class="panel-title">
-                        <a href="#"> {{ month_name }} {{ year }}</a>
 
-                        <span class="pull-right">
-		  	          <a {% if p_role %}
-                          href="{% url timesheet_listboard_url %}?p_role={{ p_role }}"
-                      {% else %} href="{% url timesheet_listboard_url employee_id %}"
-                      {% endif %}
-                          role="button" class="btn btn-sm btn-info"
-                          style='text-align:right;'>
-		  	                <i class="fa fa-reply fa-1x fa-fw" aria-hidden="true"></i></a>
-  	        	</span>
+{% if monthly_entry %}
+    <!-- Calendar header (Mon - Sun) -->
+  
+  	<form method="post" novalidate>
+  		{% csrf_token %}
+  		{{ formset.non_form_errors }}
+  		{{ formset.management_form }}
+  		{{ form.id }} {# harmless even if form has no fields #}
 
-                    </h6>
-                </div>
+      <div class="calendar-grid">
 
-            </div>
-            <div class="panel panel-default">
-                <div class="panel-heading">
-                    <h6 class="panel-title">
-                        <a id="demoraphicss-panel-title" data-toggle="collapse"
-                           data-parent="#accordion" href="#demographics-panel">Demographics {{ employee_id }}<span
-                                class="caret"></span></a>
-                    </h6>
-                </div>
-                <div id="demographics-panel" class="panel-collapse collapse in">
-                    <!-- {% include 'timesheet_dashboard/demographics.html' %} -->
-                    {% demographics employee_id %}
+	    {# Header: Mon..Sun #}
+	    {% for h in weekday_headers %}
+	    	<div class="cal-head text-center">{{ h }}</div>
+	    {% endfor %}
 
-                </div>
-
-            </div>
-            {% if 'HR' in groups %}
-                <div class="panel panel-default">
-                    <div class="panel-heading">
-                        <h6 class="panel-title">
-                            <a href="{% url 'timesheet_dashboard:timesheet_listboard_url' %}?p_role=HR">
-                                Employee Timesheets </a>
-                        </h6>
-                    </div>
-
-                </div>
-            {% endif %}
-
-            {% if 'Supervisor' in groups %}
-                <div class="panel panel-default">
-                    <div class="panel-heading">
-                        <h6 class="panel-title">
-                            <a href="{% url 'timesheet_dashboard:timesheet_listboard_url' %}?p_role=Supervisor">
-                                Supervisees Timesheets </a>
-                        </h6>
-                    </div>
-
-                </div>
-
-            {% endif %}
-
-            {% if user_employee %}
-                <div class="panel panel-default">
-                    <div class="panel-heading">
-                        <h6 class="panel-title">
-                            <a href="{% url 'timesheet_dashboard:timesheet_listboard_url' %}?employee_id={{ user.identifier }}">
-                                My Timesheets </a>
-                        </h6>
-                    </div>
-                </div>
-            {% endif %}
-
-            <div class="panel panel-default">
-                <div class="panel-heading">
-                    <h6 class="panel-title">
-
-                        <a id="status-panel-title" data-toggle="collapse"
-                           data-parent="#accordion" href="#status-panel"> Monthly
-                            Stats<span class="caret"></span></a>
-
-                    </h6>
-                </div>
-                <div id="status-panel" class="panel-collapse collapse in">
-                    <!-- {% include 'timesheet_dashboard/demographics.html' %} -->
-                    {% if leave_balance %}
-                        <a class="list-group-item">
-                            <i class="far fa-calendar"></i>
-                            <span data-toggle="tooltip" data-placement="right"
-                                  class="text text-default"> Annual Leave Taken: {{ leave_taken }} </span>
-                            <br/><i class="far fa-calendar"></i> <span
-                                data-toggle="tooltip" data-placement="right"
-                                class="text text-default"> Annual Leave Balance: {{ leave_balance }} </span>
-
-                        </a>
-                    {% endif %}
-
-                    <a class="list-group-item">
-                        <i class="fas fa-hourglass"></i>
-                        <span data-toggle="tooltip" data-placement="right"
-                              class="text text-default"> Monthly Overtime: {{ overtime_worked }} </span>
-
-                    </a>
-
-                </div>
-
-            </div>
-
-            <div class="panel panel-default">
-                <div class="panel-heading">
-                    <h6 class="panel-title">
-
-                        <a id="status-panel-title" data-toggle="collapse"
-                           data-parent="#accordion" href="#status-panel"> TimeSheet Status<span
-                                class="caret"></span></a>
-                    </h6>
-                </div>
-                <div id="status-panel" class="panel-collapse collapse in">
-                    <!-- {% include 'timesheet_dashboard/demographics.html' %} -->
-                    <a class="list-group-item">
-                        <i class="glyphicon glyphicon-ok circle-icon"
-                           style="color:white;"></i>
-                        <span data-toggle="tooltip" data-placement="right"
-                              class="text text-default" id="is-{{ timesheet_status }}">Status: {{ timesheet_status }} </span>
-
-                    </a>
-                    {% if rejected_by %}
-                        <a class="list-group-item" style="display: none;" id="rejected">
-                            <i class="glyphicon glyphicon-remove-sign circle-icon2"
-                               style="color:white;"></i>
-                            <span data-toggle="tooltip" data-placement="right"
-                                  class="text text-default" id="status-{{ rejected_by }}">Rejected by : {{ rejected_by }} </span>
-
-                        </a>
-                    {% endif %}
-                    {% if approved_by %}
-                        <a class="list-group-item" style="display: none;" id="approved">
-                            <i class="glyphicon glyphicon-ok circle-icon3"
-                               style="color:white;"></i>
-                            <span data-toggle="tooltip" data-placement="right"
-                                  class="text text-default" id="status-{{ approved_by }}">Approved by: {{ approved_by }} </span>
-
-                        </a>
-                    {% endif %}
-
-                    {% if verified_by %}
-                        <a class="list-group-item">
-                            <i class="glyphicon glyphicon-ok circle-icon4"
-                               style="color:white;"></i>
-                            <span data-toggle="tooltip" data-placement="right"
-                                  class="text text-default">Verified by: {{ verified_by }} </span>
-
-                        </a>
-                    {% endif %}
-
-                    {% if submitted_datetime %}
-                        <a class="list-group-item">
-                            <i class="glyphicon glyphicon-calendar circle-icon5"
-                               style="color:white;"></i>
-                            <span data-toggle="tooltip" data-placement="right"
-                                  class="text text-default" id="{{ submitted_datetime }}">Submitted on : {{ submitted_datetime }} </span>
-
-                        </a>
-                    {% endif %}
-
-                </div>
-
-            </div>
-
-
-            <div class="panel panel-default">
-                <div class="panel-heading">
-                    <h6 class="panel-title">
-                        Comments
-                    </h6>
-                </div>
-
-                <textarea name="comment" form="timesheet_form" id="comment" type="text "
+		{# Weeks #}
+		{% for week in calendar_rows %}
+			{% for cell in week %}
+				{% if cell.date %}
+	       		<div class="cal-day {% if day.is_today %}is-today{% endif %} {% if day.is_outside %}is-outside{% endif %}">
+	              <div class="cal-date">{{ cell.date|date:'j'}}</div>
+	              {% with f=cell.form %}
+	              	{{ f.id }}
+	              	<div class="day-form">
+		              	<!-- Hiddent input fields for day and row -->
+		              	<input 	type='hidden'
+		                   		name='{{ f.day.html_name }}'
+		                        value='{{ f.instance.day|date:"Y-m-d"}}' />
+		                <input 	type='hidden'
+		                   		name='{{ f.row.html_name }}'
+		                        value='{{ f.row.value }}' />
+		                <div class="mb-1">
+		                	{% with errs=f.duration.errors %}
+		                  	<input type="number"
+		                  		   class="form-control form-control-sm {% if errs %} is-error {% endif %}"
+		                  		   data-bs-toggle="tooltip"
+		                  		   data-bs-placement="top"
+		                  		   title="{% if errs %}{{errs|join:' & '}}{% endif %}"
+		                  		   name="{{ f.duration.html_name }}"
+		                  		   min="0" step="1" max="24"
+		                  		   value="{{ f.duration.value|default_if_none:'' }}"
+		                  		   {% if review or verify or read_only %}
+		                  		 		readonly
+		                  		   {% endif %}>
+		                  	{% endwith %}
+		                  		
+		               	</div>
+		               	<div class="mb-1">
+		               		{% with errs=f.entry_type.errors %}
+		                  	<select class="form-select form-select-sm {% if errs %} is-error {% endif %}"
+		                  			name="{{ f.entry_type.html_name }}"
+		                  			data-bs-toggle="tooltip"
+		                  		   	data-bs-placement="bottom"
+		                  		   	title="{% if errs %}{{errs|join:' & '}}{% endif %}"
+		                  			{% if review or verify or read_only %}
+		                  		 		disabled
+		                  		 	{% endif %}>
+		                  		 	{% if f.instance.day|is_holiday %}
+		                  		 		<option value="H" selected>H</option>
+		                  		 	{% elif f.instance.day|is_weekend %}
+		                  		 		<option value="WE" selected>WE</option>
+		                  		 	{% else %}
+			                  		 	{% for val, label in f.entry_type.field.choices %}
+			                  		 		<option value="{{ val }}" {% if f.entry_type.value == val %}selected{% endif %}>{{ val }}</option>
+			                  		 	{% endfor %}
+			                  		{% endif %}
+		                  	</select>
+		                  	{% endwith %}
+		                </div>
+		             </div>
+		           {% endwith %}
+	            </div>
+	            {% else %}
+	            	{# Outside-month padding cell #}
+              		<div class="cal-day bg-light {% if day.is_today %}is-today{% endif %} {% if day.is_outside %}is-outside{% endif %}"></div>
+	            {% endif %}    
+	        {% endfor %}
+	    {% endfor %}
+      </div>
+ 
+ 	  <!-- Start submit buttons -->
+      <div class="mt-2 d-flex justify-content-between">
+      	<div class="d-flex gap-2 ms-auto">
+ 
+	      	{% if review %}
+	            <button type="button" class="btn btn-danger" id="reject-record">
+	                <i class="bi bi-x-octagon-fill"></i> Reject
+	            </button>
+	            <button type="button" class="btn btn-success" id="approve-record">
+	                <i class="bi bi-hand-thumbs-up-fill"></i> Approve
+	            </button>
+	        {% elif verify %}
+	            <button type="button" class="btn btn-danger" id="reject-record">
+	                <i class="bi bi-x-octagon-fill"></i> Reject
+	            </button>
+	            <button type="button" class="btn btn-success" id="verify-record"
+	            		 {% if timesheet_status != 'Approved' %}disabled{% endif %}>
+	                <i class="bi bi-shield-fill-check"></i> Verify
+	            </button>
+	        {% elif read_only %}
+	        	{% if timesheet_status == 'Rejected' %}
+	                  <a type="button" class="btn btn-danger opacity-75" disabled>
+	                      {{ timesheet_status }}
+	                  </a>
+	             {% else %}
+	                  <a type="button" class="btn btn-success opacity-75" disabled>
+	                      {{ timesheet_status }}
+	                  </a>
+	             {% endif %}
+	        {% else %}
+	        	<button type="button" id="autofill8" class="btn btn-primary">
+	        		<i class="bi bi-input-cursor-text"></i> Autofill
+	        	</button>
+	        	<button type="submit" name="save" value="1" class="btn btn-warning" id="save-record">
+                   <i class="bi bi-floppy"></i> Save Draft
+               	</button>
+               	<button type="submit" name="submit" value="1" class="btn btn-success"
+               			id="save-submit-record">
+                   <i class="bi bi-send-plus"></i> Save and Submit
+               	</button>
+	        {% endif %}
+	    </div>
+      </div>
+    </form>
+{% else %}
+	{# Not started yet: show a read-only calendar preview #}
+    <div class="preview">
+    	<p>This month has not been started yet.</p>
+    	<div class="calendar-grid">
+    		{% for h in weekday_headers %}
+	    		<div class="cal-head text-center">{{ h }}</div>
+	    	{% endfor %}
+	    	{% for week in calendar_rows %}
+	    		{% for cell in week %}
+	    			{% if cell.date %}
+	    			<div class="day-form">
+    					<div class="cal-date">{{ cell.date|date:'j'}}</div>
+    					<p class="cal-day text-secondary text-center fs-6">- not started -</p>
+    				</div>
+    				{% else %}
+    					<div class="cal-day bg-light"></div>
+    				{% endif %}
+    			{% endfor %}
+    		{% endfor %}
+    	</div>
+ 
+ 		{% if can_create_for_month %}
+ 			<form method="post" class="start-form">
+ 				{% csrf_token %}
+ 				{# Minimal POST that triggers creation; the view will make placeholders #}
+ 				<div class="mt-2 d-flex justify-content-between">
+      				<div class="d-flex gap-2 ms-auto">
+		 			 	<button type="submit" name="start" value="1" class="btn btn-info opacity-75" id="auto-fill">
+		                	<i class="bi bi-plus-circle"></i> Start timesheet
+		               	</button>
+		            </div>
+		        </div>
+ 			</form>
+ 		{% else %}
+ 			<p class="muted">Starting future months is disabled.</p>
+ 		{% endif %}
+    </div>
+ {% endif %}
+  	<div class="d-flex justify-content-between align-items-center mt-2 calendar-legend">
+      	<div class="d-flex gap-2 align-items-center small">
+        	<span class="badge text-bg-primary"><i class="bi bi-clock-history me-1"></i>Hours</span>
+        	<span class="badge text-bg-warning"><i class="bi bi-lightning-charge me-1"></i>Overtime</span>
+        	<span class="badge text-bg-success"><i class="bi bi-sun me-1"></i>Leave</span>
+      	</div>
+      	<div class="small text-secondary"><b>NOTE:</b> Complete all entries before <em>*Save and Submit*</em>. Use <em>*Save*</em> to keep progress.</div>
+    </div>
+ </div>
+ 
+ <!-- Begin SidePanel -->
+ <div class="col-12 col-lg-3">
+    <div class="md-card">
+      <div class="card-body">
+      	<h5 class="card-title p-3 bg-info bg-opacity-10 border border-info rounded-start rounded-end">Employee {{ employee_id }}</h5>
+        <hr>
+        {% demographics employee_id %}
+        <hr>
+        <h6 class="mb-2">Monthly Stats</h6>
+        <div class="d-flex flex-column gap-2 small">
+  			{% if leave_balance %}
+          	<div class="d-flex justify-content-between">
+          		<i class="bi bi-calendar2-check text-success"></i>
+          		<span>Annual Leave Taken:</span><strong>{{ leave_taken|default:'0' }}</strong>
+          	</div>
+          	<div class="d-flex justify-content-between">
+          		<i class="bi bi-calendar2-plus text-primary"></i>
+          		<span>Annual Leave Balance:</span><strong>{{ leave_balance|default:'0' }}</strong>
+          	</div>
+			{% endif %}
+          	<div class="d-flex justify-content-between">
+          		<i class="bi bi-hourglass-split text-warning"></i>
+          		<span>Monthly Overtime:</span><strong>{{ overtime_worked|default:'0' }}</strong>
+          	</div>
+        </div>
+        <hr>
+        <h6 class="mb-2">Timesheet Status</h6>
+        <div class="d-flex flex-column gap-2 small">   	
+       		<div class="d-flex justify-content-between">
+       			<i class="bi bi-info-circle text-info"></i>
+       			<span>Status:</span>
+       			<span class="badge text-bg-{{ timesheet_status_badge|default:'primary' }}">
+       				{{ timesheet_status|default:'draft' }}
+       			</span>
+       		</div>
+       		{% if submitted_datetime %}
+       		<div class="d-flex justify-content-between">
+       			<i class="bi bi-calendar2-event text-primary"></i>
+       			<span>Submitted:</span>{{ submitted_datetime|date:"SHORT_DATE_FORMAT" }}
+       		</div>
+       		{% endif %}
+       		{% if rejected_by %}
+       		<div class="d-flex justify-content-between">
+       			<i class="bi bi-calendar2-x text-danger"></i>
+       			<span>Rejected:</span>{{ rejected_by }}
+       		</div>
+       		{% endif %}
+       		{% if approved_by %}
+       		<div class="d-flex justify-content-between">
+       			<i class="bi bi-calendar2-check text-success"></i>
+       			<span>Approved By:</span>{{ approved_by }}
+       		</div>
+       		{% endif %}
+       		{% if verified_by %}
+       		<div class="d-flex justify-content-between">
+       			<i class="bi bi-person-check text-success"></i>
+       			<span>Verified By:</span>{{ verified_by }}
+       		</div>
+       		
+       		{% endif %}
+        </div>
+        <hr>
+        <h6 class="mb-2">Comments</h6>
+        <textarea class="form-control" name="comment" form="timesheet_form" id="comment"
                           rows="4"
                           onkeyup="Allow()" placeholder="write a comment......"
                           style="width:100%; border:0;"
                         {% if not review and not verify %}
-                          disabled {% endif %}> {% if comment %}
-                    {{ comment }} {% endif %}</textarea>
-
-            </div>
-        </div>
+                          disabled
+                        {% endif %}>
+                   	{% if comment %} {{ comment }} {% endif %}</textarea>
+      </div>
     </div>
-    <script>
+  </div>
+</div>
+{% endblock %}
 
-        var append_rejected = document.getElementById('rejected');
+{% block extra-scripts %}
+	<script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var tooltipTriggerList = [].slice.call(
+            		document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl)
+            })
+        });
+        
+        (function() {
+        	  const btn = document.getElementById('autofill8');
+        	  if (!btn) return;
 
-        var status = document.getElementById('is-{{timesheet_status }}').innerHTML;
-        var Rejected = 'Status: Rejected ';
-        if (status == Rejected) {
+        	  btn.addEventListener('click', function () {
+        	    // Scope to the nearest form so we don't grab other inputs on the page
+        	    const form = this.closest('form');
+        	    if (!form) return;
 
-            append_rejected.style.display = "block";
+        	    // Find every entry_type select in the formset
+        	    const typeSelects = form.querySelectorAll('select[name$="-entry_type"]')
 
-        } else {
-            if (document.getElementById('approved') !== null) {
-                let append_approved = document.getElementById('approved');
-                append_approved.style.display = "block";
-            }
+        	    // Warn if we're going to overwrite something
+        	    let willOverwrite = false;
+        	    typeSelects.forEach(sel => {
+        	    	if (sel.value === 'RH') {
+        	    		const durationName = sel.name.replace(/entry_type$/, 'duration');
+        	    		const durationInput = form.querySelector(`input[name="${durationName}"]`);
+        	    		if (durationInput && durationInput.value && durationInput.value != 8) {
+        	    			willOverwrite = true;
+        	    		}
+        	    	}
+        	    });
+        	    
+        	    if (willOverwrite && !confirm("This will set 8 hours on Regular Hours (RH) days without hours set. Continue?")) {
+        	      return;
+        	    }
 
-        }
+        	    let changed = 0;
+        	    typeSelects.forEach(sel => {
+        	        if (sel.value === 'RH') {
+        	          const durationName = sel.name.replace(/entry_type$/, 'duration');
+        	          const durationInput = form.querySelector(`input[name="${durationName}"]`);
+						
+        	          if (durationInput && (!durationInput.value || durationInput.value === '0')) {
+        	        	  durationInput.value = '8';
+        	        	  durationInput.classList.remove('is-error');
+        	        	  durationInput.removeAttribute('title');
+        	        	  changed++;
+        	        	}
+        	    	}
+        		});
+        	    
+        	    if (!changed) {
+        	        alert('No rows with entry type "Regular Hours" found.');
+        	    }
+        	 })
+        })();
     </script>
-
-{% endblock main %}
+{% endblock %}

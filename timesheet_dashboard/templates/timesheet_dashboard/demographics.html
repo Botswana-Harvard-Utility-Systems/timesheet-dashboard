@@ -1,18 +1,25 @@
 {% load edc_base_extras %}
 {% load timesheet_dashboard_extras %}
-<div class="list-group" >
-<a class="list-group-item"><i  title="Employee ID" class="fa fa-user-circle fa-fw"></i>
-{{ employee_id}} &nbsp;&nbsp;&nbsp;&nbsp;
-<span data-toggle="tooltip" data-placement="right" title="{{ first_name }} {{ last_name }}" class="text text-default">{{ initials }}<sup><i class="fa fa-asterisk fa-fw"></i></sup></span>
 
-</a>
-<a class="list-group-item"><i class="fa fa-briefcase fa-fw"></i>
-<span data-toggle="tooltip" data-placement="right" title="Job Title" class="text text-default"> {{ job_title }} </span>
-</a>
-
-<a class="list-group-item">
-	<i  class="fa fa-users fa-fw"></i>
- 		<span data-toggle="tooltip" data-placement="right" title="Supervisor" class="text text-default"> {{ supervisor }} </span>
-	
-</a>
-</div>
+<ul class="list-group list-group-flush small mb-0">
+	<li class="list-group-item mt-2">
+		<i class="bi bi-person-badge"></i>
+		{{ employee_id}}
+		<span data-bs-toggle="tooltip" data-bs-placement="right" title="{{ first_name }} {{ last_name }}" class="text text-default">
+			{{ first_name }} {{ last_name }}
+			<sup><i class="bi bi-asterisk"></i></sup>
+		</span>
+	</li>
+	<li class="list-group-item mt-2">
+		<i class="bi bi-briefcase-fill"></i>
+		<span data-bs-toggle="tooltip" data-bs-placement="right" title="Job Title" class="text text-default">
+			{{ job_title }}
+		</span>
+	</li>
+	<li class="list-group-item mt-2">
+		<i class="bi bi-person-fill-up"></i>
+		<span data-bs-toggle="tooltip" data-bs-placement="right" title="Supervisor" class="text text-default">
+			{{ supervisor }}
+		</span>
+	</li>
+</ul>

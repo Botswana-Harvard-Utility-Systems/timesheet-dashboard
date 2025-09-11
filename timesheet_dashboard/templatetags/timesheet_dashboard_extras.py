@@ -23,12 +23,12 @@ def is_weekend(dt):
 
 @register.filter
 def is_holiday(dt):
-
     facility_app_config = django_apps.get_app_config('edc_facility')
 
     facility = facility_app_config.get_facility('5-day clinic')
 
-    holiday_list = facility.holidays.holidays.all().values_list('local_date', flat=True)
+    holiday_list = facility.holidays.holidays.values_list(
+        'local_date', flat=True)
 
     if isinstance(dt, datetime):
         return dt.date() in holiday_list

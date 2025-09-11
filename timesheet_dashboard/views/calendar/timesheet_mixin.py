@@ -1,17 +1,23 @@
 import calendar
-from datetime import datetime, timedelta
-from edc_base.utils import get_utcnow
 import math
+from datetime import datetime, timedelta, date
 from smtplib import SMTPException
-from timesheet.forms import DailyEntryForm
 
 from django.apps import apps as django_apps
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.sites.shortcuts import get_current_site
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.db.models import Q
 from django.forms import inlineformset_factory
+from django.shortcuts import redirect
+from django.urls.base import reverse
+
+from edc_base.utils import get_utcnow
+
+from timesheet.forms import DailyEntryForm
+from timesheet.forms.monthly_entry_form import DailyEntryFormSet
 
 
 class MonthlyEntryError(Exception):
@@ -19,6 +25,52 @@ class MonthlyEntryError(Exception):
 
 
 class TimesheetMixin:
+
+    daily_entry_model = 'timesheet.dailyentry'
+
+    monthly_entry_model = 'timesheet.monthlyentry'
+
+    ALLOW_FUTURE_MONTHS = getattr(
+        settings, "TIMESHEET_ALLOW_FUTURE_MONTHS", False)
+
+    @property
+    def daily_entry_model_cls(self):
+        return django_apps.get_model(self.daily_entry_model)
+
+    @property
+    def monthly_entry_model_cls(self):
+        return django_apps.get_model(self.monthly_entry_model)
+
+    def canonical_redirect_if_picker(
+            self, request, employee_id, curr_year, curr_month):
+        """
+            If user submitted ?ym=YYYY-MM via the month picker,
+            normalize to /<year>/<month>/.
+        """
+        ym = request.GET.get("ym")
+        if ym:
+            try:
+                dt = datetime.strptime(ym, '%Y-%m')
+                year, month = dt.year, dt.month
+                if curr_year != year or curr_month != month:
+                    return redirect(
+                        reverse(
+                            'timesheet_dashboard:timesheet_calendar_table_url',
+                            kwargs={'employee_id': employee_id,
+                                    'year': year,
+                                    'month': month}))
+            except ValueError:
+                messages.error(request, "Invalid month format.")
+        return None
+
+    def is_future_month(self, year, month, today=None):
+        today = today or get_utcnow().date()
+        return (year, month) > (today.year, today.month)
+
+    def add_months(self, year, month, delta):
+        idx = (year * 12 + (month - 1)) + delta
+        new_year, new_month_idx = divmod(idx, 12)
+        return new_year, new_month_idx + 1
 
     def navigate_table(self, controller, year, month):
         if controller == 'next':
@@ -278,16 +330,66 @@ class TimesheetMixin:
         else:
             return ''
 
-    def get_monthly_obj(self, month):
+    def month_day_list(self, year: int, month: int):
+        _, last_day = calendar.monthrange(year, month)
+        return [date(year, month, day) for day in range(1, last_day + 1)]
 
-        monthly_cls = django_apps.get_model('timesheet.monthlyentry')
+    def construct_month_dt(self):
+        year = self.kwargs.get('year', '')
+        month = self.kwargs.get('month', '')
+        return datetime.strptime(f'{year}-{month}-1', '%Y-%m-%d')
 
+    def get_or_create_monthly_obj(self):
+        """
+            Get existing monthly object or create a draft instance
+        """
+        dt = self.construct_month_dt()
+        monthly_obj, _created = self.monthly_entry_model_cls.objects.get_or_create(
+            employee=self.employee,
+            month=dt,
+            defaults={'status': 'draft'})
+
+        self.ensure_daily_placeholders(monthly_obj)
+        return monthly_obj, _created
+
+    def get_monthly_obj(self):
+        dt = self.construct_month_dt()
         try:
-            monthly_obj = monthly_cls.objects.get(month=month,
-                                                  employee=self.employee, )
-        except monthly_cls.DoesNotExist:
-            monthly_obj = None
-        return monthly_obj
+            monthly_obj = self.monthly_entry_model_cls.objects.get(
+                employee=self.employee,
+                month=dt)
+        except self.monthly_entry_model_cls.DoesNotExist:
+            return None
+        else:
+            return monthly_obj
+
+    def ensure_daily_placeholders(self, monthly_entry):
+        """
+            Creates any missing DailyEntry rows (no duplicates, idempotent).
+        """
+        existing_dates = set(
+            monthly_entry.daily_entries.values_list('day', flat=True))
+        month_day_list = self.month_day_list(
+            monthly_entry.month.year, monthly_entry.month.month)
+        for _day in month_day_list:
+            if _day not in existing_dates:
+                # Create empty rows up-front so inline formset is straightforward
+                self.daily_entry_model_cls.objects.create(
+                    monthly_entry=monthly_entry,
+                    day=_day,
+                    duration=0)
+
+    def get_formset(self, instance):
+        strict = (self.request.method == 'POST' and 'submit' in self.request.POST)
+        if self.request.method == 'POST':
+            formset = DailyEntryFormSet(
+                self.request.POST, instance=instance)
+        else:
+            formset = DailyEntryFormSet(instance=instance)
+
+        for f in formset.forms:
+            f.strict = strict
+        return formset
 
     def get_number_of_weeks(self, year, month):
         return len(calendar.monthcalendar(year, month))
