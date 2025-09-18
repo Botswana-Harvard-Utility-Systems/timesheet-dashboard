@@ -32,7 +32,7 @@ class ListboardView(EdcBaseViewMixin, NavbarViewMixin,
     model_wrapper_cls = MonthlyEntryModelWrapper
     listboard_view_filters = ListboardViewFilters()
     navbar_name = 'timesheet'
-    navbar_selected_item = 'timesheet_listboard'
+    navbar_selected_item = 'employee_timesheet'
     search_form_url = 'timesheet_listboard_url'
 
     @method_decorator(login_required)

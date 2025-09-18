@@ -2,12 +2,19 @@
 {% load timesheet_dashboard_extras %}
 
 <ul class="list-group list-group-flush small mb-0">
+	{% if employee_code %}
+		<li class="list-group-item mt-2">
+			<i class="bi bi-person-badge"></i>
+			<span data-bs-toggle="tooltip" data-bs-placement="right" title="{{ first_name }} {{ last_name }}" class="text text-default">
+				{{ employee_code }}
+				<sup><i class="bi bi-asterisk"></i></sup>
+			</span>
+		</li>
+	{% endif %}
 	<li class="list-group-item mt-2">
 		<i class="bi bi-person-badge"></i>
-		{{ employee_id}}
 		<span data-bs-toggle="tooltip" data-bs-placement="right" title="{{ first_name }} {{ last_name }}" class="text text-default">
 			{{ first_name }} {{ last_name }}
-			<sup><i class="bi bi-asterisk"></i></sup>
 		</span>
 	</li>
 	<li class="list-group-item mt-2">

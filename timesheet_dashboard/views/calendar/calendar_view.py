@@ -29,7 +29,7 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
     template_name = 'timesheet_dashboard/calendar/calendar_table.html'
     model = 'timesheet.monthlyentry'
     navbar_name = 'timesheet'
-    navbar_selected_item = ''
+    navbar_selected_item = 'employee_timesheet'
     success_url = 'timesheet_dashboard:timesheet_calendar_table_url'
     calendar_obj = calendar.Calendar(firstweekday=0)
     daily_entry_cls = django_apps.get_model('timesheet.dailyentry')
@@ -149,44 +149,106 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
         month = int(kwargs.get('month'))
         employee_id = kwargs.get('employee_id')
 
+        is_hr = self._is_hr(request.user)
+        is_supervisor = self._is_supervisor(request.user)
+
+        base_url = self._url_with_qs(
+            reverse('timesheet_dashboard:timesheet_calendar_table_url',
+                    kwargs={'employee_id': employee_id,
+                            'year': year,
+                            'month': month}),
+            request)
+
         if 'start' in request.POST:
             if self.is_future_month(year, month) and not self.ALLOW_FUTURE_MONTHS:
                 messages.error(
                     request,
                     'Cannot create or submit timesheets for future months.')
-                return redirect(
-                    reverse(
-                        'timesheet_dashboard:timesheet_calendar_table_url',
-                        kwargs={'employee_id': employee_id,
-                                'year': year,
-                                'month': month}))
+                return redirect(base_url)
 
             # Get or create only when user explicitly posts
             _mothly_entry, _ = self.get_or_create_monthly_obj()
             messages.success(
                 request,
                 'Timesheet created. You can now enter your days.')
-            return redirect(
-                reverse(
-                    'timesheet_dashboard:timesheet_calendar_table_url',
-                    kwargs={'employee_id': employee_id,
-                            'year': year,
-                            'month': month}))
+            return redirect(base_url)
 
         monthly_entry = self.get_monthly_obj()
+
         if not monthly_entry:
             # We do not expect to get to this point if monthly entry does
-            # not exist. Save and submit only appears for user when monthly
-            # entry exists.
+            # not exist. Save/submit/approve/reject only appears for user
+            # when monthly entry exists.
             messages.error(
                 request,
                 'Something went wrong. Please contact your administrator')
-            return redirect(
-                reverse(
-                    'timesheet_dashboard:timesheet_calendar_table_url',
-                    kwargs={'employee_id': employee_id,
-                            'year': year,
-                            'month': month}))
+            return redirect(base_url)
+
+        # Review actions
+        action = request.POST.get('review_action')
+        if action:
+            if monthly_entry.is_final:
+                messages.error(
+                    request,
+                    'This timesheet is already verified and cannot be modified further.')
+                return redirect(base_url)
+
+            prev_status = monthly_entry.status
+            if action == 'approve':
+                if not is_supervisor:
+                    messages.error(
+                        request,
+                        'You are not allowed to approve.')
+                    return redirect(base_url)
+
+                if prev_status not in ('submitted', ):
+                    messages.error(
+                        request,
+                        'Only submitted timesheets can be approved.')
+                    return redirect(base_url)
+                monthly_entry.status = 'approved'
+                monthly_entry.approved_by = self.get_user_credentials(request.user)
+                monthly_entry.approved_date = get_utcnow().date()
+            elif action == 'verify':
+                if not is_hr:
+                    messages.error(
+                        request,
+                        'You are not allowed to verify.')
+                    return redirect(base_url)
+                if prev_status not in ('approved', ):
+                    messages.error(
+                        request,
+                        'Only approved timesheets can be approved.')
+                    return redirect(base_url)
+                monthly_entry.status = 'verified'
+                monthly_entry.verified_by = self.get_user_credentials(request.user)
+                monthly_entry.verified_date = get_utcnow().date()
+            elif action == 'reject':
+                if not self._reviewer(request.user):
+                    messages.error(
+                        request,
+                        'You are not allowed to reject.')
+                    return redirect(base_url)
+                if prev_status not in ('submitted', 'approved'):
+                    messages.error(
+                        request,
+                        'Only submitted or approved timesheets can be rejected.')
+                    return redirect(base_url)
+                monthly_entry.status = 'rejected'
+                monthly_entry.rejected_by = self.get_user_credentials(request.user)
+                monthly_entry.rejected_date = get_utcnow().date()
+            else:
+                messages.error(request, 'Unknown review action')
+                return redirect(base_url)
+            monthly_entry.comment = request.POST.get('review_comment', '').strip()
+            monthly_entry.save(
+                update_fields=['status', 'approved_by', 'approved_date',
+                               'verified_by', 'verified_date', 'rejected_by',
+                               'rejected_date', 'comment'])
+            messages.success(
+                request,
+                f'Timesheet {monthly_entry.status.lower()}')
+            return redirect(base_url)
 
         strict = ('submit' in request.POST)
 
@@ -198,12 +260,7 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
             messages.info(
                 request,
                 'No changes submitted. Timesheet is open for editing.')
-            return redirect(
-                reverse(
-                    'timesheet_dashboard:timesheet_calendar_table_url',
-                    kwargs={'employee_id': employee_id,
-                            'year': year,
-                            'month': month}))
+            return redirect(base_url)
 
         form = MonthlyEntryForm(request.POST, instance=monthly_entry)
         formset = self.get_formset(instance=monthly_entry)
@@ -223,13 +280,12 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
                 messages.success(
                     request,
                     'Timesheet saved as draft')
-            return redirect(
-                reverse('timesheet_dashboard:timesheet_calendar_table_url',
-                        kwargs={'employee_id': employee_id,
-                                'year': year,
-                                'month': month}))
+            return redirect(base_url)
         else:
             # Re-render with errors using the same context pipeline
+            messages.error(
+                request,
+                'Please correct errors on highlighted dates and try again.')
             context = self.get_context_data(
                 monthly_entry=monthly_entry,
                 form=form,
@@ -247,23 +303,26 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
 
         monthly_obj = self.get_monthly_obj()
 
-        if self.request.GET.get('p_role') == 'Supervisor':
-            extra_context = {'p_role': 'Supervisor',
-                             'verified': True,
-                             'read_only': True, }
+        is_owner, is_reviewer = self._change_calendar_mode(self.request)
+        is_hr = self._is_hr(self.request.user)
+        is_supervisor = self._is_supervisor(self.request.user)
+        entry_status = getattr(monthly_obj, 'status', None)
 
-            if monthly_obj and monthly_obj.status in ['rejected', 'approved']:
-                extra_context.update({'read_only': True})
-            elif (monthly_obj and monthly_obj.status != 'verified') or not monthly_obj:
-                extra_context['review'] = True
-        elif self.request.GET.get('p_role') == 'HR':
-            extra_context = {'p_role': 'HR'}
-            if monthly_obj and monthly_obj.status in ['rejected']:
-                extra_context.update({'read_only': True})
-            else:
-                extra_context.update({'verify': True})
-        elif monthly_obj and monthly_obj.status in ['approved', 'verified']:
-            extra_context = {'read_only': True, }
+        readonly_status = ['approved', 'verified']
+        readonly = is_reviewer or (
+            is_owner and entry_status in readonly_status)
+
+        allow_edit = is_owner and entry_status not in readonly_status
+        allow_hr_review = not is_owner and is_hr and entry_status in ['approved']
+        allow_sv_review = not is_owner and is_supervisor and entry_status in ['submitted']
+
+        extra_context.update({'p_role': self.request.GET.get('p_role', None),
+                              'is_owner': is_owner,
+                              'allow_edit': allow_edit,
+                              'allow_hr_review': allow_hr_review,
+                              'allow_sv_review': allow_sv_review,
+                              'is_reviewer': is_reviewer,
+                              'readonly': readonly})
 
         if monthly_obj:
             leave_balance = None

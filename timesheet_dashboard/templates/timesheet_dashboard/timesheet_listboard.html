@@ -6,16 +6,17 @@
 
 {% block extra-css %}
 <style>
+	.table-sm td, .table-sm th { padding: .5rem .50rem; }
 	.md-card {
 	  background: var(--bs-body-bg);
 	  border-radius: 4px;
-	  box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 2px 20px rgba(0,0,0,.06);
+	  box-shadow: 0 1px 1px rgba(0,0,0, .06), 0 1px 5px rgba(0,0,0,.06);
 	  border: 1px solid rgba(0,0,0,.06);
 	  overflow: hidden;
 	}
-	.md-card > .card-body { padding: 1rem 1.25rem; }
-	.table-md td, .table-md th { padding: .6rem .70rem; }
-	
+	.md-card #details {
+		padding: 1rem .75rem;
+	}
 	@media (prefers-color-scheme: dark) {
 	  .md-card { 
 	  	border-color: rgba(255, 255, 255, .08);
@@ -32,11 +33,11 @@
   <div class="col-12 col-lg-9">
     <div class="d-flex align-items-center justify-content-between mb-3">
     	<div>
-      		<h1 class="h4 mb-0">My Timesheets</h1>
+      		<h1 class="h4 mb-0">{% if not p_role %} My {% endif %} Timesheets</h1>
       		<nav aria-label="breadcrumb" class="small">
 	          <ol class="breadcrumb mb-0">
 	            <li class="breadcrumb-item"><a href="{% url 'timesheet:timesheet_home_url' %}">Timesheet Dashboard</a></li>
-	            <li class="breadcrumb-item active">My Timesheets</li>
+	            <li class="breadcrumb-item active">{% if not p_role %} My {% endif %} Timesheets</li>
 	          </ol>
 	        </nav>
         </div>
@@ -144,16 +145,21 @@
  <div class="col-12 col-lg-3 d-none d-lg-block">
   	<div class="md-card h-100 sticky-lg-top" style="top: 1rem;">
       <div class="card-body">
-        <h5 class="card-title d-flex justify-content-between align-items-center">
+        <h5 class="card-title d-flex justify-content-between align-items-center p-3 bg-info bg-opacity-10 border border-info rounded-start rounded-end">
         	<span>Employee Details</span>
         	{% if 'Supervisor' in groups %}
-        		<a href="{% url 'timesheet_dashboard:timesheet_listboard_url' %}?p_role=Supervisor" class="btn btn-sm btn-outline-secondary">Supervisees</a>
+        		<a href="{% url timesheet_employee_listboard_url %}?p_role=Supervisor&edc_readonly=1" class="btn btn-sm btn-outline-secondary">Supervisees</a>
+        	{% endif %}
+        	{% if 'HR' in groups %}
+        		<a href="{% url timesheet_employee_listboard_url %}?p_role=HR&edc_readonly=1" class="btn btn-sm btn-outline-secondary">Employees</a>
         	{% endif %}
         </h5>
-        {% demographics employee_id %}
+        <div id="details">
+        	{% demographics employee_id %}
+        </div>
       </div>
   </div>
 </div>
-
+</div>
 
 {% endblock main %}
