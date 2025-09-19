@@ -1,42 +1,42 @@
-   /* Calendar grid styles */
-   .calendar-toolbar { gap: .5rem; }
-   .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid rgba(0,0,0,.08); border-radius: 5px; overflow: hidden; }
-   .calendar-grid .cal-head { background: var(--bs-light); font-weight: 600; text-transform: uppercase; letter-spacing: .02em; font-size: .8rem; padding: .5rem .75rem; border-right: 1px solid rgba(0,0,0,.06); }
-   .calendar-grid .cal-head:last-child { border-right: 0; }
-   .cal-day { min-height: 8rem; border-right: 1px solid rgba(0,0,0,.06); border-top: 1px solid rgba(0,0,0,.06); background: var(--bs-body-bg); position: relative; }
-   .cal-day:nth-child(7n) { border-right: 0; }
-   .cal-date {color: var(--bs-secondary); font-size: .8rem; font-weight: 600; padding: .2rem; background-color: var(--bs-light); }
-   .cal-body { padding: 1.25rem .75rem .75rem .75rem; display: flex; flex-direction: column; gap: .25rem; }
-   .cal-day.is-today { background: rgba(13,110,253,.035); box-shadow: inset 0 0 0 2px rgba(13,110,253,.15); }
-   .cal-day.is-outside { background: rgba(0,0,0,.02); color: var(--bs-secondary); }
-   .cal-day.cell-error {
-  border-color: #b00020;
-  box-shadow: 0 0 0 2px rgba(176,0,32,.06); }
-   .cal-chip { display: inline-flex; align-items: center; padding: .15rem .5rem; border-radius: 999px; font-size: .75rem; background: var(--bs-primary-bg-subtle); }
-   .cal-chip .bi { font-size: .9rem; margin-right: .25rem; }
-   .calendar-legend .badge { font-size: .7rem; }
-   .errors { color:#b00020; font-size:.9rem; grid-column:1 / -1; }
-   .is-error {border: 1px solid rgba(255, 0, 0, 0.3); }
-   .view-only-badge{padding:.35rem .6rem;border:1px dashed #bdbdbd;border-radius:999px;color:#555;background:#fafafa;font-size:.88rem}
-   @media (max-width: 768px) { .cal-day { min-height: 6.5rem; } }
-   
-   .legend{
-   	display:flex;
-   	gap:.5rem;
-   	flex-wrap:wrap;
-   	align-items:center;
-   	margin:.25rem 0 .75rem 0;
-   }
-   .legend-chip {
-   	display:inline-flex; align-items:center; gap:.4rem;
-   	border:1px solid #e5e7eb; border-radius:999px; padding:.2rem .55rem;
-   	font-size:.86rem; background:#fafafa;
-   }
-   .legend-code {
-   	font-weight:700;
-   	font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-   }
-   .legend-label { color:#555 }
+/* Calendar grid styles */
+.calendar-toolbar { gap: .5rem; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid rgba(0,0,0,.08); border-radius: 5px; overflow: hidden; }
+.calendar-grid .cal-head { background: var(--bs-light); font-weight: 600; text-transform: uppercase; letter-spacing: .02em; font-size: .8rem; padding: .5rem .75rem; border-right: 1px solid rgba(0,0,0,.06); }
+.calendar-grid .cal-head:last-child { border-right: 0; }
+.cal-day { min-height: 8rem; border-right: 1px solid rgba(0,0,0,.06); border-top: 1px solid rgba(0,0,0,.06); background: var(--bs-body-bg); position: relative; }
+.cal-day:nth-child(7n) { border-right: 0; }
+.cal-date {color: var(--bs-secondary); font-size: .8rem; font-weight: 600; padding: .2rem; background-color: var(--bs-light); }
+.cal-body { padding: 1.25rem .75rem .75rem .75rem; display: flex; flex-direction: column; gap: .25rem; }
+.cal-day.is-today { background: rgba(13,110,253,.035); box-shadow: inset 0 0 0 2px rgba(13,110,253,.15); }
+.cal-day.is-outside { background: rgba(0,0,0,.02); color: var(--bs-secondary); }
+.cal-day.cell-error {
+	border-color: #b00020;
+	box-shadow: 0 0 0 2px rgba(176,0,32,.06); }
+.cal-chip { display: inline-flex; align-items: center; padding: .15rem .5rem; border-radius: 999px; font-size: .75rem; background: var(--bs-primary-bg-subtle); }
+.cal-chip .bi { font-size: .9rem; margin-right: .25rem; }
+.calendar-legend .badge { font-size: .7rem; }
+.errors { color:#b00020; font-size:.9rem; grid-column:1 / -1; }
+.is-error {border: 1px solid rgba(255, 0, 0, 0.3); }
+.view-only-badge{padding:.35rem .6rem;border:1px dashed #bdbdbd;border-radius:999px;color:#555;background:#fafafa;font-size:.88rem}
+@media (max-width: 768px) { .cal-day { min-height: 6.5rem; } }
+ 
+ .legend{
+ 	display:flex;
+ 	gap:.5rem;
+ 	flex-wrap:wrap;
+ 	align-items:center;
+ 	margin:.25rem 0 .75rem 0;
+}
+.legend-chip {
+ 	display:inline-flex; align-items:center; gap:.4rem;
+ 	border:1px solid #e5e7eb; border-radius:999px; padding:.2rem .55rem;
+ 	font-size:.86rem; background:#fafafa;
+}
+.legend-code {
+ 	font-weight:700;
+ 	font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+.legend-label { color:#555 }
 
 .legend-rh { border-color:#cfe8d9; background:#f3fbf7; }
 .legend-hd { border-color:#cfe0f8; background:#f4f8ff; }
