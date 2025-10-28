@@ -59,6 +59,8 @@
 		.legend-stl   { background:#DBEAFE; border-color:#93C5FD; }
 		.legend-we  { background:#EDE9FE; border-color:#C4B5FD; }
 		.legend-cl { background:#FAE8FF; border-color:#F0ABFC; }
+
+		.hint{color:#666; font-size:.85rem}
 	</style>
 {% endblock %}
 
@@ -129,7 +131,7 @@
 {% if monthly_entry %}
     <!-- Calendar header (Mon - Sun) -->
   
-  	<form method="post" action="{{ self_url }}" novalidate>
+  	<form method="post" action="{{ self_url }}" id="timesheetSubmit" novalidate>
   		{% csrf_token %}
   		{{ formset.non_form_errors }}
   		{{ formset.management_form }}
@@ -379,12 +381,27 @@
         </div>
         <hr>
         <div class="d-flex flex-column gap-2">
-        	<h6 class="mb-2">Comments</h6>
+        	<h6 class="mb-2">Employee Comments</h6>
+ 
+      		<textarea 	form="timesheetSubmit"
+	      				class="form-control comment-section"
+	      				id="employee_comment"
+	      	    		name="employee_comment"
+	                    rows="4"
+	                    {% if is_owner and allow_edit %}
+	                    {% else %}
+	                    	disabled
+	                    {% endif %}>{{ form.employee_comment.value|default_if_none:form.instance.employee_comment }}</textarea>
+	        <small class="hint">Visible to your supervisor/HR when you save or submit.</small>
+        </div>
+        <hr>
+        <div class="d-flex flex-column gap-2">
+        	<h6 class="mb-2">Review Comments</h6>
         
       		<textarea 	form="reviewForm"
 	      				class="form-control comment-section"
 	      	    		name="review_comment"
-	                    rows="6"
+	                    rows="4"
 	                    {% if allow_hr_review or allow_sv_review %}
 	                    {% else %}
 	                    	disabled
