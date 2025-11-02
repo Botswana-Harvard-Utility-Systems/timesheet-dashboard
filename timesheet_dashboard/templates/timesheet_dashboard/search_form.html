@@ -1,40 +1,31 @@
-    {% load timesheet_dashboard_extras %}
-    <!-- begin search form -->
-    <span class="pull-right">
-      {% block listboard_search_form %}
-        {% comment %} {% include 'edc_dashboard/search_form.html' %} {% endcomment %}
-			<!-- Hidden field -->
-			<span class="pull-right">
-				<form  action="{% if search_form_url_reversed %}{{ search_form_url_reversed }}{% endif %}" class="form-inline" id="form-search" method="get" >
-					<div class="form-group" >
-						<div class="controls ">
-							<div class="input-group">
-								<input class="form-control input-sm textinput form-control" id="id_q" maxlength="150" name="q" placeholder="search" type="text" value="{{ q|default:'' }}" />
-								
-								<span class="input-group-btn">
-									<button  type="submit" class="btn btn btn-default btn-sm">
-										<i class="fa fa-search fa-sm"></i>
-									</button>
+{% load timesheet_dashboard_extras %}
+<!-- begin search form -->
 
-								</span>
-								{% if request.user|has_group:"HR" %}
+{% block listboard_search_form %}
+{% comment %} {% include 'edc_dashboard/search_form.html' %} {% endcomment %}
+<form method="get" action="{% if search_form_url_reversed %}{{ search_form_url_reversed }}{% endif %}" class="d-flex gap-2" id="form-search">
 
-									<input name="p_role" value="HR" type="hidden"/>
+	<input class="form-control form-control-sm" id="id_q" maxlength="150" name="q" placeholder="Search..." type="text" value="{{ q|default:'' }}" />
+	
+	<button  type="submit" class="btn btn-sm btn-outline-primary">
+		<i class="bi bi-search"></i>
+	</button>
 
-								{% elif request.user|has_group:"Supervisor" %}
+	<!-- Hidden extra qs fields -->
+	{% if request.user|has_group:"HR" %}
 
-									<input name="p_role" value="Supervisor" type="hidden"/>
-									
-								{% endif %}
-							</div>
-						</div>
-					</div>
-					{% if f %}<input type="hidden" name="f" value="{{ f }}">{% endif %}
-					{% if e %}<input type="hidden" name="e" value="{{ e }}">{% endif %}
-					{% if o %}<input type="hidden" name="o" value="{{ o }}">{% endif %}
-				</form>    
-			</span>
+		<input name="p_role" value="HR" type="hidden"/>
 
-      {% endblock listboard_search_form %}
-    </span>
-    <!-- end search form -->
+	{% elif request.user|has_group:"Supervisor" %}
+
+		<input name="p_role" value="Supervisor" type="hidden"/>
+		
+	{% endif %}
+
+	{% if f %}<input type="hidden" name="f" value="{{ f }}">{% endif %}
+	{% if e %}<input type="hidden" name="e" value="{{ e }}">{% endif %}
+	{% if o %}<input type="hidden" name="o" value="{{ o }}">{% endif %}
+</form>    
+
+{% endblock listboard_search_form %}
+<!-- end search form -->

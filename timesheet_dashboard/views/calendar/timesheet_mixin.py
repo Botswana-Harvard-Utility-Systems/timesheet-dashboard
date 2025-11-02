@@ -1,17 +1,18 @@
 import calendar
-from datetime import datetime, timedelta
-from edc_base.utils import get_utcnow
 import math
-from smtplib import SMTPException
-from timesheet.forms import DailyEntryForm
+from datetime import datetime, timedelta, date
 
 from django.apps import apps as django_apps
 from django.conf import settings
-from django.contrib.sites.shortcuts import get_current_site
-from django.core.exceptions import ValidationError
-from django.core.mail import send_mail
+from django.contrib import messages
 from django.db.models import Q
-from django.forms import inlineformset_factory
+from django.shortcuts import redirect
+from django.urls.base import reverse
+
+from edc_base.utils import get_utcnow
+
+from timesheet.forms import DailyEntryForm
+from timesheet.forms.monthly_entry_form import DailyEntryFormSet
 
 
 class MonthlyEntryError(Exception):
@@ -20,190 +21,105 @@ class MonthlyEntryError(Exception):
 
 class TimesheetMixin:
 
-    def navigate_table(self, controller, year, month):
-        if controller == 'next':
-            if month == '12':
-                year = int(year) + 1
-                month = 1
-            else:
-                month = int(month) + 1
-        elif controller == 'prev':
-            if month == '1':
-                year = int(year) - 1
-                month = 12
-            else:
-                month = int(month) - 1
+    daily_entry_model = 'timesheet.dailyentry'
 
-        return year, month
+    monthly_entry_model = 'timesheet.monthlyentry'
 
-    def clean_data(self, data, daily_entries_count, monthly_entry):
-        """ Remove duplicate entries from the formset data """
-        for i in range(daily_entries_count):
-            index = str(i + 1)
-            day = data.get(index + '-day')
+    ALLOW_FUTURE_MONTHS = getattr(
+        settings, "TIMESHEET_ALLOW_FUTURE_MONTHS", False)
 
-            day_date = datetime.strptime(day, '%Y-%m-%d')
+    @property
+    def daily_entry_model_cls(self):
+        return django_apps.get_model(self.daily_entry_model)
+
+    @property
+    def monthly_entry_model_cls(self):
+        return django_apps.get_model(self.monthly_entry_model)
+
+    def _qs_prefix(self, request, drop=("ym", )):
+        """
+            Return '?a=1&b=2' (or '' if none), preserving current
+            request.GET, optionally dropping keys like 'ym' used by
+            the month picker.
+        """
+        qs = request.GET.copy()
+        for k in drop:
+            if k in qs:
+                del qs[k]
+        s = qs.urlencode()
+        return f"?{s}" if s else ""
+
+    def _url_with_qs(self, base_url, request, drop=("ym", )):
+        return base_url + self._qs_prefix(request, drop=drop)
+
+    def canonical_redirect_if_picker(
+            self, request, employee_id, curr_year, curr_month):
+        """
+            If user submitted ?ym=YYYY-MM via the month picker,
+            normalize to /<year>/<month>/.
+        """
+        ym = request.GET.get("ym")
+        if ym:
             try:
-                daily_entry_obj = self.daily_entry_cls.objects.get(
-                    day=day_date,
-                    monthly_entry=monthly_entry)
-            except self.daily_entry_cls.DoesNotExist:
-                pass
-            else:
-                duration = data.get(index + '-duration')
-                entry_type = data.get(index + '-entry_type')
-                if (daily_entry_obj.duration != duration
-                        or daily_entry_obj.entry_type != entry_type):
-                    daily_entry_obj.duration = duration
-                    daily_entry_obj.entry_type = entry_type
-                    daily_entry_obj.save()
+                dt = datetime.strptime(ym, '%Y-%m')
+                year, month = dt.year, dt.month
+                if curr_year != year or curr_month != month:
+                    return redirect(
+                        reverse(
+                            'timesheet_dashboard:timesheet_calendar_table_url',
+                            kwargs={'employee_id': employee_id,
+                                    'year': year,
+                                    'month': month}))
+            except ValueError:
+                messages.error(request, "Invalid month format.")
+        return None
 
-                data.pop(index + '-duration')
-                data.pop(index + '-entry_type')
-                for key in data.keys():
-                    if (index + '-row') in key:
-                        data.pop(key)
-                        break
-                data.pop(index + '-day')
+    def _is_supervisor(self, user):
+        return user.groups.filter(name='Supervisor').exists()
 
-    def add_daily_entries(self, request, *args, **kwargs):
-        monthly_entry_cls = django_apps.get_model(self.model)
-        data = request.POST.dict()
-        year = self.kwargs.get('year', '')
-        month = self.kwargs.get('month', '')
-        daily_entries = None
+    def _is_hr(self, user):
+        return user.groups.filter(name='HR').exists()
 
-        if request.POST.get('timesheet_review'):
-            try:
-                monthly_entry = monthly_entry_cls.objects.get(
-                    employee=self.employee,
-                    month=datetime.strptime(f'{year}-{month}-1', '%Y-%m-%d'))
-            except monthly_entry_cls.DoesNotExist:
-                raise MonthlyEntryError(
-                    f"Missing timesheet being reviewed for {self.employee}",
-                    f" for month starting {monthly_entry.month}.")
-            else:
-                if request.POST.get('comment').strip() != '':
-                    monthly_entry.comment = request.POST.get('comment')
-                else:
-                    monthly_entry.comment = None
-                prev_status = monthly_entry.status
-                monthly_entry.status = request.POST.get('timesheet_review')
+    def _reviewer(self, user):
+        in_group = user.groups.filter(
+            name__in=['Supervisor', 'HR']).exists()
 
-                if (prev_status != request.POST.get('timesheet_review')
-                        and request.POST.get('timesheet_review') in
-                        ['rejected', 'verified', 'approved']):
-                    field_prefix = request.POST.get('timesheet_review')
+        return in_group
 
-                    setattr(monthly_entry, (field_prefix + '_date'),
-                            get_utcnow().date())
-                    setattr(monthly_entry, (field_prefix + '_by'), (
-                            request.user.first_name[0] + ' ' + request.user.last_name))
-                    if request.POST.get('timesheet_review') == 'rejected':
-                        setattr(monthly_entry, ('verified_date'), None)
-                        setattr(monthly_entry, ('verified_by'), None)
-                        setattr(monthly_entry, ('approved_date'), None)
-                        setattr(monthly_entry, ('approved_by'), None)
+    def _target_employee(self, request):
+        """ Return employee instance for request user if not
+            reviewer otherwise, return supervisee/employee (HR)
+            instance that is being reviewed.
+        """
+        employee_id = self.kwargs.get('employee_id')
+        if employee_id and self._reviewer(request.user):
+            if self.employee:
+                return self.employee
 
-                    current_site = get_current_site(request=None)
+        return self.user_employee
 
-                    subject = f'Timesheet for {monthly_entry.month}'
-                    message = (
-                        f'Dear {monthly_entry.employee.first_name},\n\nPlease note '
-                        f'your timesheet for {monthly_entry.month} has been '
-                        f'{monthly_entry.status} by {request.user.first_name} '
-                        f'{request.user.last_name} on the BHP Utility system '
-                        f'http://{current_site.domain}. \n\n')
-                    if request.POST.get('comment').strip() != '':
-                        comment_msg = 'Comment: ' + request.POST.get(
-                            'comment') + '\n\n'
-                        message += comment_msg
-                    message += 'Good day :).'
-                    from_email = settings.EMAIL_HOST_USER
-                    user = monthly_entry.employee.email
-                    try:
-                        send_mail(subject, message, from_email, [user, ],
-                                  fail_silently=False)
-                    except SMTPException as e:
-                        raise ValidationError(
-                            f'There was an error sending an email: {e}')
-                monthly_entry.save()
-        else:
-            try:
-                monthly_entry = monthly_entry_cls.objects.get(
-                    employee=self.employee,
-                    month=datetime.strptime(f'{year}-{month}-1', '%Y-%m-%d'))
-            except monthly_entry_cls.DoesNotExist:
-                monthly_entry = monthly_entry_cls(employee=self.employee,
-                                                  month=datetime.strptime(
-                                                      f'{year}-{month}-1',
-                                                      '%Y-%m-%d'))
-            else:
-                daily_entries = self.daily_entry_cls.objects.filter(
-                    monthly_entry=monthly_entry)
-                monthly_entry.comment = None
+    def _change_calendar_mode(self, request):
+        target_employee = self._target_employee(request)
+        is_owner = (target_employee.id == self.user_employee.id)
+        is_reviewer = (not is_owner) and self._reviewer(request.user)
 
-            DailyEntryFormSet = inlineformset_factory(monthly_entry_cls,
-                                                      self.daily_entry_cls,
-                                                      form=DailyEntryForm,
-                                                      fields=['day',
-                                                              'duration',
-                                                              'entry_type',
-                                                              'row'],
-                                                      can_delete=True)
+        return is_owner, is_reviewer
 
-            if daily_entries:
-                self.clean_data(data, daily_entries.count(), monthly_entry)
+    def get_user_credentials(self, user):
+        first_name = getattr(user, 'first_name', '')
+        last_name = getattr(user, 'last_name', '')
+        if first_name and last_name:
+            return f'{first_name[0]}. {last_name}'
+        return ''
 
-            total_forms = int(data.get('dailyentry_set-TOTAL_FORMS'))
-            for i in range(total_forms):
-                index = str(i)
-                day = data.get('dailyentry_set-' + index + '-day')
-                day = f'{year}-{month}-' + str(day)
-                day_date = datetime.strptime(day, '%Y-%m-%d')
-                data['dailyentry_set-' + index + '-day'] = day_date
+    def is_future_month(self, year, month, today=None):
+        today = today or get_utcnow().date()
+        return (year, month) > (today.year, today.month)
 
-            formset = DailyEntryFormSet(data=data, instance=monthly_entry)
-            if formset.is_valid():
-                if request.POST.get('save_submit') == '1':
-                    monthly_entry.status = 'submitted'
-                    monthly_entry.submitted_datetime = get_utcnow()
-                # monthly_entry = self.sum_monthly_leave_days(formset.queryset,
-                # monthly_entry)
-                monthly_entry = self.calculate_monthly_overtime(
-                    formset.queryset, monthly_entry)
-                monthly_entry.save()
-                current_contract = self.get_current_contract(
-                    monthly_entry.employee_id)
-                if current_contract:
-                    current_contract.leave_balance = (
-                            current_contract.leave_balance -
-                            monthly_entry.annual_leave_taken)
-                formset.save()
-
-    # def sum_monthly_leave_days(self, dailyentries, monthly_entry):
-    #
-    #     leave_types = ['AL', 'STL', 'SL', 'CL', 'ML', 'PL']
-    #     leave_taken_types = ['annual_leave_taken', 'study_leave_taken',
-    #     'sick_leave_taken',
-    #                          'compassionate_leave_taken', 'maternity_leave_taken',
-    #                          'paternity_leave_taken']
-    #
-    #     for leave_type, leave_taken in zip(leave_types, leave_taken_types):
-    #         leave_entries = dailyentries.filter(entry_type=leave_type)
-    #
-    #         for leave_entry in leave_entries:
-    #             timeParts = [int(s) for s in leave_entry.duration.split(':')]
-    #         totalSecs += (timeParts[0] * 60 + timeParts[1]) * 60
-    #         totalSecs, sec = divmod(totalSecs, 60)
-    #         hr, min = divmod(totalSecs, 60)
-    #
-    #         leave_sum_dict = leave_entries.aggregate(Sum('duration'))
-    #         if leave_sum_dict.get('duration__sum'):
-    #             setattr(monthly_entry, leave_taken, leave_sum_dict.get(
-    #             'duration__sum') / 8)
-    #
-    #     return monthly_entry
+    def add_months(self, year, month, delta):
+        idx = (year * 12 + (month - 1)) + delta
+        new_year, new_month_idx = divmod(idx, 12)
+        return new_year, new_month_idx + 1
 
     def get_current_contract(self, employee_id):
 
@@ -278,16 +194,66 @@ class TimesheetMixin:
         else:
             return ''
 
-    def get_monthly_obj(self, month):
+    def month_day_list(self, year: int, month: int):
+        _, last_day = calendar.monthrange(year, month)
+        return [date(year, month, day) for day in range(1, last_day + 1)]
 
-        monthly_cls = django_apps.get_model('timesheet.monthlyentry')
+    def construct_month_dt(self):
+        year = self.kwargs.get('year', '')
+        month = self.kwargs.get('month', '')
+        return datetime.strptime(f'{year}-{month}-1', '%Y-%m-%d')
 
+    def get_or_create_monthly_obj(self):
+        """
+            Get existing monthly object or create a draft instance
+        """
+        dt = self.construct_month_dt()
+        monthly_obj, _created = self.monthly_entry_model_cls.objects.get_or_create(
+            employee=self.employee,
+            month=dt,
+            defaults={'status': 'draft'})
+
+        self.ensure_daily_placeholders(monthly_obj)
+        return monthly_obj, _created
+
+    def get_monthly_obj(self):
+        dt = self.construct_month_dt()
         try:
-            monthly_obj = monthly_cls.objects.get(month=month,
-                                                  employee=self.employee, )
-        except monthly_cls.DoesNotExist:
-            monthly_obj = None
-        return monthly_obj
+            monthly_obj = self.monthly_entry_model_cls.objects.get(
+                employee=self.employee,
+                month=dt)
+        except self.monthly_entry_model_cls.DoesNotExist:
+            return None
+        else:
+            return monthly_obj
+
+    def ensure_daily_placeholders(self, monthly_entry):
+        """
+            Creates any missing DailyEntry rows (no duplicates, idempotent).
+        """
+        existing_dates = set(
+            monthly_entry.daily_entries.values_list('day', flat=True))
+        month_day_list = self.month_day_list(
+            monthly_entry.month.year, monthly_entry.month.month)
+        for _day in month_day_list:
+            if _day not in existing_dates:
+                # Create empty rows up-front so inline formset is straightforward
+                self.daily_entry_model_cls.objects.create(
+                    monthly_entry=monthly_entry,
+                    day=_day,
+                    duration=0)
+
+    def get_formset(self, instance):
+        strict = (self.request.method == 'POST' and 'submit' in self.request.POST)
+        if self.request.method == 'POST':
+            formset = DailyEntryFormSet(
+                self.request.POST, instance=instance)
+        else:
+            formset = DailyEntryFormSet(instance=instance)
+
+        for f in formset.forms:
+            f.strict = strict
+        return formset
 
     def get_number_of_weeks(self, year, month):
         return len(calendar.monthcalendar(year, month))
@@ -356,12 +322,8 @@ class TimesheetMixin:
     def entry_types(self):
         daily_entry_cls = django_apps.get_model('timesheet.dailyentry')
         entry_types = daily_entry_cls._meta.get_field('entry_type').choices
-        if self.is_security:
-            return tuple(entry_type for entry_type in entry_types
-                         if entry_type[0] not in ['WE'])
-        else:
-            return tuple(entry_type for entry_type in entry_types
-                         if entry_type[0] not in ['H', 'WE', 'OD'])
+
+        return entry_types
 
     @property
     def is_security(self):

@@ -18,12 +18,12 @@
     
 }
 </style>
-{% if status == 'new' %}
+{% if status == 'draft' %}
 	<a id="edit_timesheet_{{employee_id}}"  title="Timesheet New"  data-toggle="tooltip"
-		data-placement="right" class="btn btn-default btn-sm" role="button" 
+		data-placement="right" class="btn btn-primary btn-sm" role="button" 
 		href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' employee_id  year month %}">
 
-     <span class="btn-label"><i class="fa fa-pencil-alt fa-sm"></i></span>
+     <span class="btn-label"><i class="bi bi-pencil-square"></i></span>
           Edit T/S
  </a>
 
@@ -32,28 +32,28 @@
 	data-placement="right" class="btn btn-info btn-sm" role="button" 
 	href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' employee_id  year month %}">
      
-     <span class="btn-label"><i class="fas fa-tasks"></i></i></span>
+     <span class="btn-label"><i class="bi bi-ui-checks"></i></span>
      Submitted
  </a>
 {% elif status == 'rejected' %}
    <a id="rejected_timesheet_{{employee_id}}"  title="Timesheet Rejected"  data-toggle="tooltip"
     data-placement="right" class="btn btn-danger btn-sm" role="button" 
 	href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' employee_id  year month %}">
-       <span class="btn-label"><i class="glyphicon glyphicon-remove-sign circle-icon2"></i></span>
+       <span class="btn-label"><i class="bi bi-x-octagon-fill"></i></span>
        Rejected
    </a>
  {% elif status == 'verified' %}
   <a id="verified_timesheet_{{employee_id}}"  title="Timesheet Verified"  data-toggle="tooltip"
 	data-placement="right" class="btn btn-success btn-sm" role="button" 
 	href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' employee_id  year month %}">
-        <span class="btn-label"><i class="glyphicon glyphicon-ok circle-icon1-"></i></span>
+        <span class="btn-label"><i class="bi bi-shield-fill-check"></i></span>
       Verified
   </a>
 {% elif status == 'approved' %}
    <a id="approved_timesheet_{{employee_id}}"  title="Timesheet Approved"  data-toggle="tooltip"
       data-placement="right" class="btn btn-success btn-sm" role="button" 
 	  href="{% url 'timesheet_dashboard:timesheet_calendar_table_url' employee_id  year month %}">
-        <span class="btn-label"><i class="glyphicon glyphicon-ok circle-icon"></i></span>
+        <span class="btn-label"><i class="bi bi-check-circle-fill"></i></span>
        Approved
    </a>
 {% endif %}

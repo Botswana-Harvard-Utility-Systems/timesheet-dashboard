@@ -1,11 +1,19 @@
 {% if p_role in groups  and p_role == 'HR'%} 
- <a id="timesheets_{{employee_id}}" class="btn btn-primary btn-sm" role="button"   
-   title="Go to employee timesheets" href="{% url timesheet_listboard_url employee_id%}?p_role=HR">
-   <i class="fa fa-clock-o fa-sm"></i> Timesheets  <i class="fa fa-share"></i></a>
-  {% else %}
-    {% if p_role in groups and p_role == 'Supervisor'%}
-      <a id="timesheets_{{employee_id}}" class="btn btn-primary btn-sm" role="button"   
-      title="Go to employee timesheets" href="{% url timesheet_listboard_url employee_id%}?p_role=Supervisor">
-      <i class="fa fa-clock-o fa-sm"></i> Timesheets  <i class="fa fa-share"></i></a>
+ 	<a 	id="timesheets_{{employee_id}}"
+ 		class="btn btn-primary btn-sm"
+ 		role="button"   
+   		title="Go to employee timesheets"
+   		href="{% url timesheet_listboard_url employee_id%}?p_role=HR">
+   		<i class="bi bi-clock-history"></i> Timesheets
+   	</a>
+{% else %}
+	{% if p_role in groups and p_role == 'Supervisor'%}
+		<a 	id="timesheets_{{employee_id}}"
+			class="btn btn-primary btn-sm"
+			role="button"   
+			title="Go to employee timesheets"
+			href="{% url timesheet_listboard_url employee_id%}?p_role=Supervisor">
+      		<i class="bi bi-clock-history"></i> Timesheets
+      	</a>
     {% endif %}
 {% endif %}
