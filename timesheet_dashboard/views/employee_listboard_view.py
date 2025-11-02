@@ -7,19 +7,15 @@ import re
 from django.apps import apps as django_apps
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
-from django.db.models.constants import LOOKUP_SEP
 from django.utils.decorators import method_decorator
 
 from edc_navbar import NavbarViewMixin
-
-from .filters import EmployeeListboardViewFilters
 
 
 class EmployeeListBoardView(
         NavbarViewMixin, EdcBaseViewMixin, ListboardFilterViewMixin,
         SearchFormViewMixin, ListboardView):
 
-    # supervisor_queryset_lookups = []
     listboard_template = 'timesheet_employee_listboard_template'
     listboard_url = 'timesheet_employee_listboard_url'
     listboard_panel_style = 'info'
@@ -27,23 +23,20 @@ class EmployeeListBoardView(
 
     model = 'bhp_personnel.employee'
     model_wrapper_cls = EmployeeModelWrapper
-    # listboard_view_filters = EmployeeListboardViewFilters()
     navbar_name = 'timesheet'
-    navbar_selected_item = 'timesheet_listboard'
+    navbar_selected_item = 'employee_timesheet'
     ordering = '-modified'
     paginate_by = 10
     search_form_url = 'timesheet_employee_listboard_url'
     employee_model = 'bhp_personnel.employee'
-    
 
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
-    
+
     @property
     def employee_cls(self):
         return django_apps.get_model(self.employee_model)
-
 
     @property
     def employee(self):
@@ -53,18 +46,20 @@ class EmployeeListBoardView(
             return None
         else:
             return employee_obj
-        
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
         p_role = self.request.GET.get('p_role')
+        breadcrumb_title = 'Supervisees' if p_role == 'Supervisor' else 'Employees'
         context.update(
             p_role=p_role,
+            breadcrumb_title=breadcrumb_title,
             departments=self.departments,
             groups=[g.name for g in self.request.user.groups.all()],
             employee_add_url=self.model_cls().get_absolute_url(),
             querystring=self.user_id,
-            employee = self.employee)
+            employee=self.employee)
         return context
 
     @property
@@ -133,7 +128,6 @@ class EmployeeListBoardView(
     def get_queryset(self):
         usr_groups = [g.name for g in self.request.user.groups.all()]
         qs = super().get_queryset()
-
         if self.request.GET.get('dept'):
             if 'HR' in usr_groups and self.request.GET.get('p_role') == 'HR':
                 qs = qs.filter(department__dept_name=self.request.GET.get('dept'))
@@ -144,7 +138,18 @@ class EmployeeListBoardView(
             except supervisor_cls.DoesNotExist:
                 pass
             else:
-                qs = qs.filter(Q(supervisor=supervisor_obj))  # | Q(supervisor_alt=supervisor_obj))
+                initial_supervisor_qs = qs.filter(Q(supervisor=supervisor_obj))  # | Q(supervisor_alt=supervisor_obj))
+                supervisees_lists = initial_supervisor_qs.values_list('email',
+                                                             flat=True).distinct()
+                for email in supervisees_lists:
+                    try:
+                        supervisee_object = supervisor_cls.objects.get(email=email)
+                    except supervisor_cls.DoesNotExist:
+                        pass
+                    else:
+                        supervisee_sub_qs = qs.filter(Q(supervisor=supervisee_object))
+                        initial_supervisor_qs = initial_supervisor_qs.union(supervisee_sub_qs)
+                qs = initial_supervisor_qs
         return qs
 
     def extra_search_options(self, search_term):
