@@ -404,7 +404,7 @@
 	      				class="form-control comment-section"
 	      	    		name="review_comment"
 	                    rows="4"
-	                    {% if allow_hr_review or allow_sv_review or allow_reject %}
+	                    {% if allow_hr_review or allow_sv_review or allow_reject or allow_retract %}
 	                    {% else %}
 	                    	disabled
 	                    {% endif %}>{% if comment %}{{ comment }}{% endif %}</textarea>

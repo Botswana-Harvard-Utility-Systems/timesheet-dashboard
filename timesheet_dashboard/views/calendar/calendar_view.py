@@ -186,6 +186,7 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
 
         # Review actions
         action = request.POST.get('review_action')
+        review_comment = request.POST.get('review_comment', '').strip()
         final_message = None
         if action:
             # Only allow HR to retract timesheets once they are on their final state.
@@ -206,6 +207,11 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
                     messages.error(
                         request,
                         'You can only retract a verified timesheet')
+                    return redirect(base_url)
+                if not review_comment:
+                    messages.error(
+                        request,
+                        'A comment is required to retract verification.')
                     return redirect(base_url)
                 monthly_entry.status = 'approved'
                 monthly_entry.verified_by = None
@@ -257,7 +263,7 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
             else:
                 messages.error(request, 'Unknown review action')
                 return redirect(base_url)
-            monthly_entry.comment = request.POST.get('review_comment', '').strip()
+            monthly_entry.comment = review_comment
             monthly_entry.save(
                 update_fields=['status', 'approved_by', 'approved_date',
                                'verified_by', 'verified_date', 'rejected_by',
