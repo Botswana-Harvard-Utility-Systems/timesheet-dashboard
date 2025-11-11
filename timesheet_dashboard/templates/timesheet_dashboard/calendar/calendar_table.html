@@ -259,6 +259,11 @@
                       {{ timesheet_status }}
                   </a>
              {% else %}
+             	{% if allow_retract %}
+             		<button type="submit" form="reviewForm" name="review_action" value="retract" class="btn btn-danger">
+		                <i class="bi bi-x-octagon-fill"></i> Retract Verification
+		            </button>
+             	{% endif %}
                   <a type="button" class="btn btn-success opacity-75" disabled>
                       {{ timesheet_status }}
                   </a>
@@ -399,7 +404,7 @@
 	      				class="form-control comment-section"
 	      	    		name="review_comment"
 	                    rows="4"
-	                    {% if allow_hr_review or allow_sv_review %}
+	                    {% if allow_hr_review or allow_sv_review or allow_reject %}
 	                    {% else %}
 	                    	disabled
 	                    {% endif %}>{% if comment %}{{ comment }}{% endif %}</textarea>

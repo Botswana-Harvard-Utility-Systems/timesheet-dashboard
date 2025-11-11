@@ -186,15 +186,32 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
 
         # Review actions
         action = request.POST.get('review_action')
+        final_message = None
         if action:
-            if monthly_entry.is_final:
+            # Only allow HR to retract timesheets once they are on their final state.
+            if monthly_entry.is_final and not is_hr:
                 messages.error(
                     request,
                     'This timesheet is already verified and cannot be modified further.')
                 return redirect(base_url)
 
             prev_status = monthly_entry.status
-            if action == 'approve':
+            if action == 'retract':
+                if not is_hr:
+                    messages.error(
+                        request,
+                        'You are not allowed to retract verification.')
+                    return redirect(base_url)
+                if prev_status != 'verified':
+                    messages.error(
+                        request,
+                        'You can only retract a verified timesheet')
+                    return redirect(base_url)
+                monthly_entry.status = 'approved'
+                monthly_entry.verified_by = None
+                monthly_entry.verified_date = None
+                final_message = 'Verification retracted. Status is now "Approved".'
+            elif action == 'approve':
                 if not is_supervisor:
                     messages.error(
                         request,
@@ -247,7 +264,7 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
                                'rejected_date', 'comment'])
             messages.success(
                 request,
-                f'Timesheet {monthly_entry.status.lower()}')
+                f'Timesheet {final_message or monthly_entry.status.lower()}')
             return redirect(base_url)
 
         strict = ('submit' in request.POST)
@@ -317,6 +334,7 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
         allow_sv_review = not is_owner and is_supervisor and entry_status in ['submitted']
         allow_reject = (
             not is_owner and (is_supervisor or is_hr) and entry_status in ('submitted', 'approved'))
+        allow_retract = not is_owner and is_hr and entry_status == 'verified'
 
         extra_context.update({'p_role': self.request.GET.get('p_role', None),
                               'is_owner': is_owner,
@@ -324,6 +342,7 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
                               'allow_hr_review': allow_hr_review,
                               'allow_sv_review': allow_sv_review,
                               'allow_reject': allow_reject,
+                              'allow_retract': allow_retract,
                               'is_reviewer': is_reviewer,
                               'readonly': readonly})
 
