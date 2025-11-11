@@ -138,9 +138,9 @@ class EmployeeListBoardView(
             except supervisor_cls.DoesNotExist:
                 pass
             else:
-                initial_supervisor_qs = qs.filter(Q(supervisor=supervisor_obj))  # | Q(supervisor_alt=supervisor_obj))
-                supervisees_lists = initial_supervisor_qs.values_list('email',
-                                                             flat=True).distinct()
+                initial_supervisor_qs = qs.filter(Q(supervisor=supervisor_obj))
+                supervisees_lists = initial_supervisor_qs.values_list(
+                    'email', flat=True).distinct()
                 for email in supervisees_lists:
                     try:
                         supervisee_object = supervisor_cls.objects.get(email=email)

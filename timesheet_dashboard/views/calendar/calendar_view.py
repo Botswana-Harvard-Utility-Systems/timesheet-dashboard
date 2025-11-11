@@ -186,15 +186,38 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
 
         # Review actions
         action = request.POST.get('review_action')
+        review_comment = request.POST.get('review_comment', '').strip()
+        final_message = None
         if action:
-            if monthly_entry.is_final:
+            # Only allow HR to retract timesheets once they are on their final state.
+            if monthly_entry.is_final and not is_hr:
                 messages.error(
                     request,
                     'This timesheet is already verified and cannot be modified further.')
                 return redirect(base_url)
 
             prev_status = monthly_entry.status
-            if action == 'approve':
+            if action == 'retract':
+                if not is_hr:
+                    messages.error(
+                        request,
+                        'You are not allowed to retract verification.')
+                    return redirect(base_url)
+                if prev_status != 'verified':
+                    messages.error(
+                        request,
+                        'You can only retract a verified timesheet')
+                    return redirect(base_url)
+                if not review_comment:
+                    messages.error(
+                        request,
+                        'A comment is required to retract verification.')
+                    return redirect(base_url)
+                monthly_entry.status = 'approved'
+                monthly_entry.verified_by = None
+                monthly_entry.verified_date = None
+                final_message = 'Verification retracted. Status is now "Approved".'
+            elif action == 'approve':
                 if not is_supervisor:
                     messages.error(
                         request,
@@ -240,14 +263,14 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
             else:
                 messages.error(request, 'Unknown review action')
                 return redirect(base_url)
-            monthly_entry.comment = request.POST.get('review_comment', '').strip()
+            monthly_entry.comment = review_comment
             monthly_entry.save(
                 update_fields=['status', 'approved_by', 'approved_date',
                                'verified_by', 'verified_date', 'rejected_by',
                                'rejected_date', 'comment'])
             messages.success(
                 request,
-                f'Timesheet {monthly_entry.status.lower()}')
+                f'Timesheet {final_message or monthly_entry.status.lower()}')
             return redirect(base_url)
 
         strict = ('submit' in request.POST)
@@ -315,12 +338,17 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
         allow_edit = is_owner and entry_status not in readonly_status
         allow_hr_review = not is_owner and is_hr and entry_status in ['approved']
         allow_sv_review = not is_owner and is_supervisor and entry_status in ['submitted']
+        allow_reject = (
+            not is_owner and (is_supervisor or is_hr) and entry_status in ('submitted', 'approved'))
+        allow_retract = not is_owner and is_hr and entry_status == 'verified'
 
         extra_context.update({'p_role': self.request.GET.get('p_role', None),
                               'is_owner': is_owner,
                               'allow_edit': allow_edit,
                               'allow_hr_review': allow_hr_review,
                               'allow_sv_review': allow_sv_review,
+                              'allow_reject': allow_reject,
+                              'allow_retract': allow_retract,
                               'is_reviewer': is_reviewer,
                               'readonly': readonly})
 
@@ -343,7 +371,7 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
                 approved_by=monthly_obj.approved_by,
                 submitted_datetime=monthly_obj.submitted_datetime,
                 rejected_by=monthly_obj.rejected_by,
-                monthly_obj_job_title=monthly_obj_job_title
+                monthly_obj_job_title=monthly_obj_job_title,
             )
 
         month_name = calendar.month_name[month]
@@ -359,7 +387,7 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
                        holidays=self.get_holidays(year, month),
                        entry_types=entry_types,
                        month_names=list(calendar.month_name)[1:13],
-                       is_security=self.is_security,
+                       is_nightwatch=self.is_nightwatch,
                        **extra_context)
         return context
 

@@ -75,6 +75,7 @@ class ListboardView(EdcBaseViewMixin, NavbarViewMixin,
             departments=self.departments,
             employee_id=employee_id,
             employee=self.get_employee,
+            supervisor_obj=self.supervisor_obj,
             timesheet_add_url=timesheet_add_url,
             curr_year=get_utcnow().year,
             curr_month=get_utcnow().month,
@@ -117,23 +118,16 @@ class ListboardView(EdcBaseViewMixin, NavbarViewMixin,
 
         return [dept.dept_name for dept in department_cls.objects.all()]
 
-    # def supervisors(self, supervisor=None):
-        # """Return a list of supervisors in the same highrachy.
-        # """
-        # employee_cls = django_apps.get_model('bhp_personnel.employee')
-        # supervisors = [supervisor]
-        #
-        # employees = employee_cls.objects.filter(supervisor=supervisor)
-        # for employee in employees:
-            # supervisor_cls = django_apps.get_model('bhp_personnel.supervisor')
-            # try:
-                # supervisor_obj = supervisor_cls.objects.get(email=employee.email)
-            # except supervisor_cls.DoesNotExist:
-                # pass
-            # else:
-                # supervisors.append(supervisor_obj)
-        # return supervisors
-        #
+    @property
+    def supervisor_cls(self):
+        return django_apps.get_model('bhp_personnel.supervisor')
+
+    @property
+    def supervisor_obj(self):
+        supervisor_obj = self.supervisor_cls.objects.filter(
+            email=self.request.user.email).exists()
+        return supervisor_obj
+
     @property
     def supervisor_lookup_prefix(self):
         supervisor_lookup_prefix = LOOKUP_SEP.join(self.supervisor_queryset_lookups)
@@ -148,11 +142,10 @@ class ListboardView(EdcBaseViewMixin, NavbarViewMixin,
                             or self.request.GET.get('employee_id')})
 
         elif ('Supervisor' in usr_groups and request.GET.get('p_role') == 'Supervisor'):
-            supervisor_cls = django_apps.get_model('bhp_personnel.supervisor')
 
             try:
-                supervisor_obj = supervisor_cls.objects.get(email=self.request.user.email)
-            except supervisor_cls.DoesNotExist:
+                supervisor_obj = self.supervisor_cls.objects.get(email=self.request.user.email)
+            except self.supervisor_cls.DoesNotExist:
                 options.update({'user_created': None})
             else:
                 options.update(
@@ -166,8 +159,9 @@ class ListboardView(EdcBaseViewMixin, NavbarViewMixin,
         if (('Supervisor' in usr_groups and self.request.GET.get('p_role')
              == 'Supervisor') or ('HR' in usr_groups and self.request.GET.get('p_role')
                                   == 'HR')):
-            qs = qs.filter(status__in=['approved', 'verified', 'rejected', 'submitted'],
-                               month__gte=date(2022, 7, 1))
+            qs = qs.filter(
+                status__in=['approved', 'verified', 'rejected', 'submitted'],
+                month__gte=date(2022, 7, 1))
 
         if self.request.GET.get('dept'):
             usr_groups = [g.name for g in self.request.user.groups.all()]
