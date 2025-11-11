@@ -147,7 +147,7 @@
       <div class="card-body">
         <h5 class="card-title d-flex justify-content-between align-items-center p-3 bg-info bg-opacity-10 border border-info rounded-start rounded-end">
         	<span>Employee Details</span>
-        	{% if 'Supervisor' in groups %}
+        	{% if 'Supervisor' in groups and supervisor_obj %}
         		<a href="{% url timesheet_employee_listboard_url %}?p_role=Supervisor&edc_readonly=1" class="btn btn-sm btn-outline-secondary">Supervisees</a>
         	{% endif %}
         	{% if 'HR' in groups %}

@@ -75,7 +75,12 @@ class TimesheetMixin:
         return None
 
     def _is_supervisor(self, user):
-        return user.groups.filter(name='Supervisor').exists()
+        is_supervisor = user.groups.filter(name='Supervisor').exists()
+        return (is_supervisor and self._is_employee_supervisor(user))
+
+    def _is_employee_supervisor(self, user):
+        supervisor_email = self.employee.supervisor.email
+        return user.email == supervisor_email
 
     def _is_hr(self, user):
         return user.groups.filter(name='HR').exists()
@@ -140,7 +145,7 @@ class TimesheetMixin:
         weekday_entries = dailyentries.filter(
             Q(day__week_day__lt=7) & Q(day__week_day__gt=1) & Q(entry_type='RH'))
 
-        if self.is_security:
+        if self.is_nightwatch:
             base_time_obj = 12
 
         extra_hours = 0
@@ -157,13 +162,13 @@ class TimesheetMixin:
         holiday_entries = dailyentries.filter(
             Q(entry_type='H'))
 
-        if self.is_security:
+        if self.is_nightwatch:
             weekend_entries = dailyentries.filter(
                 Q(day__week_day__gte=6) & Q(day__week_day__lte=7)
                 | Q(entry_type='H'))
 
         for weekend_entry in weekend_entries:
-            if self.is_security:
+            if self.is_nightwatch:
                 difference = weekend_entry.duration - base_time_obj
                 if difference > 0:
                     extra_hours += difference
@@ -189,7 +194,7 @@ class TimesheetMixin:
         holiday_list = facility.holidays.holidays.filter(
             local_date__year=year,
             local_date__month=month).values_list('local_date', flat=True)
-        if not self.is_security:
+        if not self.is_nightwatch:
             return '|'.join([f'{h.year}/{h.month}/{h.day}' for h in holiday_list])
         else:
             return ''
@@ -326,12 +331,12 @@ class TimesheetMixin:
         return entry_types
 
     @property
-    def is_security(self):
+    def is_nightwatch(self):
         """
         - returns : True if the employee is a security guard
         """
         if self.user_employee:
-            return 'Night' in self.user_employee.job_title
+            return 'night' in self.user_employee.job_title.lower()
         return False
 
     def monthly_obj_job_title(self, monthly_obj):

@@ -186,9 +186,9 @@
 		                  			{% if readonly %}
 		                  		 		disabled
 		                  		 	{% endif %}>
-		                  		 	{% if f.instance.day|is_holiday %}
+		                  		 	{% if f.instance.day|is_holiday and not is_nightwatch %}
 		                  		 		<option value="H" selected>H</option>
-		                  		 	{% elif f.instance.day|is_weekend %}
+		                  		 	{% elif f.instance.day|is_weekend and not is_nightwatch %}
 		                  		 		<option value="WE" selected>WE</option>
 		                  		 	{% else %}
 			                  		 	{% for val, label in f.entry_type.field.choices %}
@@ -210,7 +210,7 @@
       </div>
  
  	  <!-- Start submit buttons -->
-      <div class="mt-2 d-flex justify-content-between">
+      <div class="mt-2 d-flex justify-content-between" id="em-btns" data-is-nightwatch={{is_nightwatch}}>
       	<div class="d-flex gap-2 ms-auto">
 	        {% if allow_edit %}
 	        	{% if timesheet_status|lower == 'draft' %}
@@ -233,19 +233,16 @@
     	{% csrf_token %}
     	<div class="mt-2 d-flex justify-content-between">
 	    	<div class="d-flex gap-2 ms-auto">
-	    		{% if allow_sv_review %}
-		            <button type="submit" name="review_action" value="reject" class="btn btn-danger">
+	    		{% if allow_reject %}
+	    			<button type="submit" name="review_action" value="reject" class="btn btn-danger">
 		                <i class="bi bi-x-octagon-fill"></i> Reject
 		            </button>
-	
+	    		{% endif %}
+	    		{% if allow_sv_review %}
 		            <button type="submit" name="review_action" value="approve" class="btn btn-success">
 		                <i class="bi bi-hand-thumbs-up-fill"></i> Approve
 		            </button>
 		        {% elif allow_hr_review %}
-					<button type="submit" name="review_action" value="reject" class="btn btn-danger">
-		                <i class="bi bi-x-octagon-fill"></i> Reject
-		            </button>
-	
 		            <button type="submit"  name="review_action" value="verify" class="btn btn-success">
 		                <i class="bi bi-shield-fill-check"></i> Verify
 		            </button>
@@ -254,7 +251,7 @@
 	    </div>
     </form>
   
-   	{% if not allow_edit and not allow_hr_review and not allow_sv_review %}
+   	{% if not allow_edit and not allow_hr_review and not allow_sv_review and not allow_reject %}
    	<div class="mt-2 d-flex justify-content-between">
    	 	<div class="d-flex gap-2 ms-auto">
         	{% if timesheet_status|lower == 'rejected' %}
@@ -425,9 +422,14 @@
         
         (function() {
         	  const btn = document.getElementById('autofill8');
+        	  const el = document.getElementById('em-btns');
+        	  const isNightwatch = el.dataset.isNightwatch.toLowerCase() === "true";
+
         	  if (!btn) return;
 
         	  btn.addEventListener('click', function () {
+        		const hoursToSet = isNightwatch ? '12' : '8';
+        		console.log(typeof isNightwatch);
         	    // Scope to the nearest form so we don't grab other inputs on the page
         	    const form = this.closest('form');
         	    if (!form) return;
@@ -447,7 +449,7 @@
         	    	}
         	    });
         	    
-        	    if (willOverwrite && !confirm("This will set 8 hours on Regular Hours (RH) days without hours set. Continue?")) {
+        	    if (willOverwrite && !confirm(`This will set ${hoursToSet} hours on Regular Hours (RH) days without hours set. Continue?`)) {
         	      return;
         	    }
 
@@ -458,7 +460,7 @@
         	          const durationInput = form.querySelector(`input[name="${durationName}"]`);
 						
         	          if (durationInput && (!durationInput.value || durationInput.value === '0')) {
-        	        	  durationInput.value = '8';
+        	        	  durationInput.value = hoursToSet;
         	        	  durationInput.classList.remove('is-error');
         	        	  durationInput.removeAttribute('title');
         	        	  changed++;

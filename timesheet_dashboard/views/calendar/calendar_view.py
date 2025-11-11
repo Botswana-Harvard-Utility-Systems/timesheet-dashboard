@@ -315,12 +315,15 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
         allow_edit = is_owner and entry_status not in readonly_status
         allow_hr_review = not is_owner and is_hr and entry_status in ['approved']
         allow_sv_review = not is_owner and is_supervisor and entry_status in ['submitted']
+        allow_reject = (
+            not is_owner and (is_supervisor or is_hr) and entry_status in ('submitted', 'approved'))
 
         extra_context.update({'p_role': self.request.GET.get('p_role', None),
                               'is_owner': is_owner,
                               'allow_edit': allow_edit,
                               'allow_hr_review': allow_hr_review,
                               'allow_sv_review': allow_sv_review,
+                              'allow_reject': allow_reject,
                               'is_reviewer': is_reviewer,
                               'readonly': readonly})
 
@@ -343,7 +346,7 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
                 approved_by=monthly_obj.approved_by,
                 submitted_datetime=monthly_obj.submitted_datetime,
                 rejected_by=monthly_obj.rejected_by,
-                monthly_obj_job_title=monthly_obj_job_title
+                monthly_obj_job_title=monthly_obj_job_title,
             )
 
         month_name = calendar.month_name[month]
@@ -359,7 +362,7 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
                        holidays=self.get_holidays(year, month),
                        entry_types=entry_types,
                        month_names=list(calendar.month_name)[1:13],
-                       is_security=self.is_security,
+                       is_nightwatch=self.is_nightwatch,
                        **extra_context)
         return context
 
