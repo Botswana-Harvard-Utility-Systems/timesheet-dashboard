@@ -6,92 +6,28 @@
 
 {% block title %}Timesheet Calendar{% endblock %}
 {% block extra-css %}
-	<style>
-		/* Calendar grid styles */
-		.calendar-toolbar { gap: .5rem; }
-		.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid rgba(0,0,0,.08); border-radius: 5px; overflow: hidden; }
-		.calendar-grid .cal-head { background: var(--bs-light); font-weight: 600; text-transform: uppercase; letter-spacing: .02em; font-size: .8rem; padding: .5rem .75rem; border-right: 1px solid rgba(0,0,0,.06); }
-		.calendar-grid .cal-head:last-child { border-right: 0; }
-		.cal-day { min-height: 8rem; border-right: 1px solid rgba(0,0,0,.06); border-top: 1px solid rgba(0,0,0,.06); background: var(--bs-body-bg); position: relative; }
-		.cal-day:nth-child(7n) { border-right: 0; }
-		.cal-date {color: var(--bs-secondary); font-size: .8rem; font-weight: 600; padding: .2rem; background-color: var(--bs-light); }
-		.cal-body { padding: 1.25rem .75rem .75rem .75rem; display: flex; flex-direction: column; gap: .25rem; }
-		.cal-day.is-today { background: rgba(13,110,253,.035); box-shadow: inset 0 0 0 2px rgba(13,110,253,.15); }
-		.cal-day.is-outside { background: rgba(0,0,0,.02); color: var(--bs-secondary); }
-		.cal-day.cell-error {
-			border-color: #b00020;
-			box-shadow: 0 0 0 2px rgba(176,0,32,.06); }
-		.cal-chip { display: inline-flex; align-items: center; padding: .15rem .5rem; border-radius: 999px; font-size: .75rem; background: var(--bs-primary-bg-subtle); }
-		.cal-chip .bi { font-size: .9rem; margin-right: .25rem; }
-		.calendar-legend .badge { font-size: .7rem; }
-		.errors { color:#b00020; font-size:.9rem; grid-column:1 / -1; }
-		.is-error {border: 1px solid rgba(255, 0, 0, 0.3); }
-		.view-only-badge{padding:.35rem .6rem;border:1px dashed #bdbdbd;border-radius:999px;color:#555;background:#fafafa;font-size:.88rem}
-		@media (max-width: 768px) { .cal-day { min-height: 6.5rem; } }
-		 
-		 .legend{
-		 	display:flex;
-		 	gap:.5rem;
-		 	flex-wrap:wrap;
-		 	align-items:center;
-		 	margin:.25rem 0 .75rem 0;
-		}
-		.legend-chip {
-		 	display:inline-flex; align-items:center; gap:.4rem;
-		 	border:1px solid #e5e7eb; border-radius:999px; padding:.2rem .55rem;
-		 	font-size:.86rem; background:#fafafa;
-		}
-		.legend-code {
-		 	font-weight:700;
-		 	font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-		}
-		.legend-label { color:#555 }
-		
-		.legend-rh { border-color:#cfe8d9; background:#f3fbf7; }
-		.legend-hd { border-color:#cfe0f8; background:#f4f8ff; }
-		.legend-od { border-color:#f6d3d3; background:#fff6f6; }
-		.legend-sl { border-color:#ffe4a1; background:#fffaec; }
-		.legend-h  { border-color:#FCD34D; background:#FEF3C7; }
-		.legend-al   { background:#ECFCCB; border-color:#BEF264; }
-		.legend-fh  { background:#DCFCE7; border-color:#86EFAC; }
-		.legend-ml    { background:#CCFBF1; border-color:#5EEAD4; }
-		.legend-pl   { background:#CFFAFE; border-color:#67E8F9; }
-		.legend-stl   { background:#DBEAFE; border-color:#93C5FD; }
-		.legend-we  { background:#EDE9FE; border-color:#C4B5FD; }
-		.legend-cl { background:#FAE8FF; border-color:#F0ABFC; }
-
-		.hint{color:#666; font-size:.85rem}
-	</style>
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'timesheet_dashboard/css/calendar_table.css' %}">
 {% endblock %}
 
 {% block main %}
-<div class="row g-3">
+{% now "Y-m-d" as today %}
+<div class="row g-4 timesheet-calendar">
   <!-- Main column -->
   <div class="col-12 col-lg-9">
-  	{# Entry type legend #}
-
-	<div class="legend justify-content-center">
-	  {% for item in entry_types %}
-	    <span class="legend-chip legend-{{ item.0|lower }}" title="{{ item.1 }}">
-	      <span class="legend-code">{{ item.0 }}</span>
-	      <span class="legend-label">{{ item.1 }}</span>
-	    </span>
-	  {% endfor %}
-	</div>
-
     <!-- Toolbar -->
-    <div class="md-card mb-3">
+    <div class="calendar-panel mb-3">
       <div class="card-body d-flex flex-wrap align-items-center justify-content-between calendar-toolbar">
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex flex-wrap align-items-center gap-3">
           <a {% if p_role %}
           		href="{% url timesheet_listboard_url employee_id %}?p_role={{ p_role }}"
           	 {% else %}
           	 	href="{% url timesheet_listboard_url employee_id %}"
           	 {% endif %}
-          	class="btn btn-outline-info btn-sm">
+            class="btn btn-outline-secondary btn-sm">
           		<i class="bi bi-arrow-left"></i> Back to list
           </a>
-          <h1 class="h5 mb-0">{{ month_name }} {{ year }}</h1>
+          <h1 class="h4 mb-0">{{ month_name }} {{ year }}</h1>
         </div>
         
         {# Month navigation #}
@@ -111,8 +47,8 @@
 	        
 		        <form method="get" class="d-flex flex-wrap align-items-end gap-2">
 		          <div>
-		            <label class="form-label small mb-1">Jump to</label>
-		            <input  type="month"
+                    <label class="form-label small mb-1" for="calendar-month">Jump to</label>
+                    <input  type="month" id="calendar-month"
 		            		name="ym"
 		            		value="{{ year }}-{{ month|stringformat:'02d' }}"
 		            		onchange="this.form.submit()"
@@ -128,6 +64,18 @@
       </div>
     </div>
 
+    <section class="calendar-key" aria-labelledby="calendar-key-heading">
+      <h2 id="calendar-key-heading">Entry type key</h2>
+      <ul class="legend list-unstyled mb-0">
+        {% for code, label in entry_types %}
+          <li class="legend-chip legend-{{ code|lower }}">
+            <span class="legend-code">{{ code }}</span>
+            <span class="legend-label">{{ label }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+
 {% if monthly_entry %}
     <!-- Calendar header (Mon - Sun) -->
   
@@ -137,7 +85,7 @@
   		{{ formset.management_form }}
   		{{ form.id }} {# harmless even if form has no fields #}
 
-      <div class="calendar-grid">
+      <div class="calendar-grid" role="region" aria-label="Monthly calendar" tabindex="0">
 
 	    {# Header: Mon..Sun #}
 	    {% for h in weekday_headers %}
@@ -148,7 +96,7 @@
 		{% for week in calendar_rows %}
 			{% for cell in week %}
 				{% if cell.date %}
-	       		<div class="cal-day {% if day.is_today %}is-today{% endif %} {% if day.is_outside %}is-outside{% endif %}">
+                <div class="cal-day{% if cell.date|date:'Y-m-d' == today %} is-today{% endif %}">
 	              <div class="cal-date">{{ cell.date|date:'j'}}</div>
 	              {% with f=cell.form %}
 	              	{{ f.id }}
@@ -167,7 +115,7 @@
 		                  		   data-bs-toggle="tooltip"
 		                  		   data-bs-placement="top"
 		                  		   title="{% if errs %}{{errs|join:' & '}}{% endif %}"
-		                  		   name="{{ f.duration.html_name }}"
+                                   name="{{ f.duration.html_name }}" aria-label="Hours for {{ cell.date|date:'F j' }}"
 		                  		   min="0" step="1" max="24"
 		                  		   value="{{ f.duration.value|default_if_none:'' }}"
 		                  		   {% if readonly %}
@@ -179,7 +127,7 @@
 		               	<div class="mb-1">
 		               		{% with errs=f.entry_type.errors %}
 		                  	<select class="form-select form-select-sm {% if errs %} is-error {% endif %}"
-		                  			name="{{ f.entry_type.html_name }}"
+                                    name="{{ f.entry_type.html_name }}" aria-label="Entry type for {{ cell.date|date:'F j' }}"
 		                  			data-bs-toggle="tooltip"
 		                  		   	data-bs-placement="bottom"
 		                  		   	title="{% if errs %}{{errs|join:' & '}}{% endif %}"
@@ -203,7 +151,7 @@
 	            </div>
 	            {% else %}
 	            	{# Outside-month padding cell #}
-              		<div class="cal-day bg-light {% if day.is_today %}is-today{% endif %} {% if day.is_outside %}is-outside{% endif %}"></div>
+                    <div class="cal-day is-outside"></div>
 	            {% endif %}    
 	        {% endfor %}
 	    {% endfor %}
@@ -211,14 +159,14 @@
  
  	  <!-- Start submit buttons -->
       <div class="mt-2 d-flex justify-content-between" id="em-btns" data-is-nightwatch={{is_nightwatch}}>
-      	<div class="d-flex gap-2 ms-auto">
+        <div class="d-flex flex-wrap gap-2 ms-auto">
 	        {% if allow_edit %}
 	        	{% if timesheet_status|lower == 'draft' %}
-	        		<button type="button" id="autofill8" class="btn btn-primary">
+                    <button type="button" id="autofill8" class="btn btn-outline-primary">
 	        			<i class="bi bi-input-cursor-text"></i> Autofill
 	        		</button>
 	        	{% endif %}
-	        	<button type="submit" name="save" value="1" class="btn btn-warning" id="save-record">
+                <button type="submit" name="save" value="1" class="btn btn-outline-secondary" id="save-record">
                    <i class="bi bi-floppy"></i> Save Draft
                	</button>
                	<button type="submit" name="submit" value="1" class="btn btn-success"
@@ -232,7 +180,7 @@
     <form method="post" action="{{ self_url }}" class="review-buttons" id="reviewForm">
     	{% csrf_token %}
     	<div class="mt-2 d-flex justify-content-between">
-	    	<div class="d-flex gap-2 ms-auto">
+            <div class="d-flex flex-wrap gap-2 ms-auto">
 	    		{% if allow_reject %}
 	    			<button type="submit" name="review_action" value="reject" class="btn btn-danger">
 		                <i class="bi bi-x-octagon-fill"></i> Reject
@@ -253,7 +201,7 @@
   
    	{% if not allow_edit and not allow_hr_review and not allow_sv_review and not allow_reject %}
    	<div class="mt-2 d-flex justify-content-between">
-   	 	<div class="d-flex gap-2 ms-auto">
+        <div class="d-flex flex-wrap gap-2 ms-auto">
         	{% if timesheet_status|lower == 'rejected' %}
                   <a type="button" class="btn btn-danger opacity-75" disabled>
                       {{ timesheet_status }}
@@ -275,7 +223,7 @@
 	{# Not started yet: show a read-only calendar preview #}
     <div class="preview">
     	<p>This month has not been started yet.</p>
-    	<div class="calendar-grid">
+        <div class="calendar-grid" role="region" aria-label="Monthly calendar" tabindex="0">
     		{% for h in weekday_headers %}
 	    		<div class="cal-head text-center">{{ h }}</div>
 	    	{% endfor %}
@@ -298,7 +246,7 @@
  				{% csrf_token %}
  				{# Minimal POST that triggers creation; the view will make placeholders #}
  				<div class="mt-2 d-flex justify-content-between">
-      				<div class="d-flex gap-2 ms-auto">
+                    <div class="d-flex flex-wrap gap-2 ms-auto">
 		 			 	<button type="submit" name="start" value="1" class="btn btn-info opacity-75" id="auto-fill">
 		                	<i class="bi bi-plus-circle"></i> Start timesheet
 		               	</button>
@@ -310,22 +258,14 @@
  		{% endif %}
     </div>
  {% endif %}
-  	<div class="d-flex justify-content-between align-items-center mt-2 calendar-legend">
-      	<div class="d-flex gap-2 align-items-center small">
-        	<span class="badge text-bg-primary"><i class="bi bi-clock-history me-1"></i>Hours</span>
-        	<span class="badge text-bg-warning"><i class="bi bi-lightning-charge me-1"></i>Overtime</span>
-        	<span class="badge text-bg-success"><i class="bi bi-sun me-1"></i>Leave</span>
-      	</div>
-      	<div class="small text-secondary"><b>NOTE:</b> Complete all entries before <em>*Save and Submit*</em>. Use <em>*Save*</em> to keep progress.</div>
-    </div>
+
  </div>
  
  <!-- Begin SidePanel -->
  <div class="col-12 col-lg-3">
-    <div class="md-card">
+    <div class="calendar-panel calendar-sidebar">
       <div class="card-body">
-      	<h5 class="card-title p-3 bg-info bg-opacity-10 border border-info rounded-start rounded-end">Employee {{ employee_id }}</h5>
-        <hr>
+        <h2 class="h6 mb-2">Employee details</h2>
         {% demographics employee_id %}
         <hr>
         <h6 class="mb-2">Monthly Stats</h6>
@@ -393,7 +333,7 @@
 	                    {% if is_owner and allow_edit %}
 	                    {% else %}
 	                    	disabled
-	                    {% endif %}>{{ form.employee_comment.value|default_if_none:form.instance.employee_comment }}</textarea>
+                        {% endif %}>{{ form.employee_comment.value|default_if_none:"" }}</textarea>
 	        <small class="hint">Visible to your supervisor/HR when you save or submit.</small>
         </div>
         <hr>
@@ -413,6 +353,19 @@
     </div>
   </div>
 </div>
+<dialog class="calendar-dialog" id="autofill-dialog"
+        aria-labelledby="autofill-title" aria-describedby="autofill-description">
+  <form method="dialog">
+    <div class="calendar-dialog-content">
+      <h2 class="h5 mb-2" id="autofill-title">Autofill regular hours</h2>
+      <p class="text-secondary mb-0" id="autofill-description"></p>
+    </div>
+    <div class="calendar-dialog-actions">
+      <button class="btn btn-outline-secondary" id="autofill-cancel" value="cancel" autofocus>Cancel</button>
+      <button class="btn btn-primary" id="autofill-confirm" value="apply">Fill hours</button>
+    </div>
+  </form>
+</dialog>
 {% endblock %}
 
 {% block extra-scripts %}
@@ -425,58 +378,49 @@
             })
         });
         
-        (function() {
-        	  const btn = document.getElementById('autofill8');
-        	  const el = document.getElementById('em-btns');
-        	  const isNightwatch = el.dataset.isNightwatch.toLowerCase() === "true";
+        (() => {
+            const button = document.getElementById('autofill8');
+            if (!button) return;
 
-        	  if (!btn) return;
+            const form = button.form;
+            const dialog = document.getElementById('autofill-dialog');
+            const description = document.getElementById('autofill-description');
+            const cancel = document.getElementById('autofill-cancel');
+            const apply = document.getElementById('autofill-confirm');
+            const isNightwatch = document.getElementById('em-btns').dataset.isNightwatch.toLowerCase() === 'true';
+            const hours = isNightwatch ? '12' : '8';
+            let pending = [];
 
-        	  btn.addEventListener('click', function () {
-        		const hoursToSet = isNightwatch ? '12' : '8';
-        		console.log(typeof isNightwatch);
-        	    // Scope to the nearest form so we don't grab other inputs on the page
-        	    const form = this.closest('form');
-        	    if (!form) return;
+            button.addEventListener('click', () => {
+                pending = [];
+                for (const entry of form.querySelectorAll('select[name$="-entry_type"]')) {
+                    if (entry.value !== 'RH' || entry.disabled) continue;
+                    const input = form.elements.namedItem(entry.name.replace(/entry_type$/, 'duration'));
+                    if (input && !input.readOnly && !input.disabled && (input.value === '' || Number(input.value) === 0)) {
+                        pending.push(input);
+                    }
+                }
 
-        	    // Find every entry_type select in the formset
-        	    const typeSelects = form.querySelectorAll('select[name$="-entry_type"]')
+                const count = pending.length;
+                description.textContent = count
+                    ? `Fill ${hours} hours on ${count} Regular Hours ${count === 1 ? 'day' : 'days'} with blank or zero hours. Save Draft or Save and Submit to keep the changes.`
+                    : 'All Regular Hours days already have hours, or this month has no Regular Hours days.';
+                apply.hidden = count === 0;
+                cancel.textContent = count ? 'Cancel' : 'Done';
+                dialog.returnValue = '';
+                dialog.showModal();
+            });
 
-        	    // Warn if we're going to overwrite something
-        	    let willOverwrite = false;
-        	    typeSelects.forEach(sel => {
-        	    	if (sel.value === 'RH') {
-        	    		const durationName = sel.name.replace(/entry_type$/, 'duration');
-        	    		const durationInput = form.querySelector(`input[name="${durationName}"]`);
-        	    		if (durationInput && durationInput.value && durationInput.value != 8) {
-        	    			willOverwrite = true;
-        	    		}
-        	    	}
-        	    });
-        	    
-        	    if (willOverwrite && !confirm(`This will set ${hoursToSet} hours on Regular Hours (RH) days without hours set. Continue?`)) {
-        	      return;
-        	    }
-
-        	    let changed = 0;
-        	    typeSelects.forEach(sel => {
-        	        if (sel.value === 'RH') {
-        	          const durationName = sel.name.replace(/entry_type$/, 'duration');
-        	          const durationInput = form.querySelector(`input[name="${durationName}"]`);
-						
-        	          if (durationInput && (!durationInput.value || durationInput.value === '0')) {
-        	        	  durationInput.value = hoursToSet;
-        	        	  durationInput.classList.remove('is-error');
-        	        	  durationInput.removeAttribute('title');
-        	        	  changed++;
-        	        	}
-        	    	}
-        		});
-        	    
-        	    if (!changed) {
-        	        alert('No rows with entry type "Regular Hours" found.');
-        	    }
-        	 })
+            dialog.addEventListener('close', () => {
+                if (dialog.returnValue === 'apply') {
+                    for (const input of pending) {
+                        input.value = hours;
+                        input.classList.remove('is-error');
+                        input.removeAttribute('title');
+                    }
+                }
+                pending = [];
+            });
         })();
     </script>
 {% endblock %}

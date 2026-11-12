@@ -7,6 +7,7 @@ import re
 from django.apps import apps as django_apps
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
+from ..access import visible_employees
 from django.utils.decorators import method_decorator
 
 from edc_navbar import NavbarViewMixin
@@ -126,30 +127,11 @@ class EmployeeListBoardView(
         return options
 
     def get_queryset(self):
-        usr_groups = [g.name for g in self.request.user.groups.all()]
         qs = super().get_queryset()
+        allowed = visible_employees(self.request.user, team_only=self.request.GET.get('p_role') == 'Supervisor')
+        qs = qs.filter(pk__in=allowed)
         if self.request.GET.get('dept'):
-            if 'HR' in usr_groups and self.request.GET.get('p_role') == 'HR':
-                qs = qs.filter(department__dept_name=self.request.GET.get('dept'))
-        elif('Supervisor' in usr_groups and self.request.GET.get('p_role') == 'Supervisor'):
-            supervisor_cls = django_apps.get_model('bhp_personnel.supervisor')
-            try:
-                supervisor_obj = supervisor_cls.objects.get(email=self.request.user.email)
-            except supervisor_cls.DoesNotExist:
-                pass
-            else:
-                initial_supervisor_qs = qs.filter(Q(supervisor=supervisor_obj))
-                supervisees_lists = initial_supervisor_qs.values_list(
-                    'email', flat=True).distinct()
-                for email in supervisees_lists:
-                    try:
-                        supervisee_object = supervisor_cls.objects.get(email=email)
-                    except supervisor_cls.DoesNotExist:
-                        pass
-                    else:
-                        supervisee_sub_qs = qs.filter(Q(supervisor=supervisee_object))
-                        initial_supervisor_qs = initial_supervisor_qs.union(supervisee_sub_qs)
-                qs = initial_supervisor_qs
+            qs = qs.filter(department__dept_name=self.request.GET['dept'])
         return qs
 
     def extra_search_options(self, search_term):

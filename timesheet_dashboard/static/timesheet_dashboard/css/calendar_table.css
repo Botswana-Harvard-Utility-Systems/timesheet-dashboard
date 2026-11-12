@@ -50,3 +50,65 @@
 .legend-stl   { background:#DBEAFE; border-color:#93C5FD; }
 .legend-we  { background:#EDE9FE; border-color:#C4B5FD; }
 .legend-cl { background:#FAE8FF; border-color:#F0ABFC; }
+
+.timesheet-calendar .calendar-panel,
+.timesheet-calendar .calendar-key {
+  border: 1px solid var(--bs-border-color);
+  border-radius: .75rem;
+  background: var(--bs-body-bg);
+}
+.timesheet-calendar .calendar-toolbar,
+.timesheet-calendar .calendar-sidebar > .card-body { padding: 1rem; }
+.timesheet-calendar .calendar-key {
+  padding: .75rem 1rem;
+  margin-bottom: .875rem;
+}
+.timesheet-calendar .calendar-key h2 {
+  font-size: .875rem;
+  font-weight: 600;
+  margin-bottom: .5rem;
+}
+.timesheet-calendar .legend { gap: .35rem; margin-top: 0; }
+.timesheet-calendar .legend-chip { font-size: .78rem; }
+.timesheet-calendar .calendar-grid {
+  grid-template-columns: repeat(7, minmax(4.75rem, 1fr));
+  overflow-x: auto;
+  border-radius: .625rem;
+}
+.timesheet-calendar .cal-head { padding: .55rem .25rem; }
+.timesheet-calendar .cal-day { min-height: 6.25rem; }
+.timesheet-calendar .cal-date {
+  padding: .35rem .5rem .2rem;
+  background: transparent;
+  color: var(--bs-body-color);
+}
+.timesheet-calendar .day-form { min-width: 0; padding: 0 .4rem .35rem; }
+.timesheet-calendar .cal-day.is-today .cal-date { color: var(--bs-primary); }
+.timesheet-calendar .calendar-sidebar hr { margin: 1rem 0; opacity: .15; }
+.timesheet-calendar .calendar-sidebar .list-group-item {
+  margin-top: 0 !important;
+  padding: .4rem 0;
+}
+.timesheet-calendar .hint { color: var(--bs-secondary-color); font-size: .8rem; }
+
+.calendar-dialog {
+  width: min(28rem, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  padding: 0;
+  border: 1px solid var(--bs-border-color);
+  border-radius: .875rem;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  box-shadow: 0 1rem 3rem rgba(15, 23, 42, .2);
+}
+.calendar-dialog::backdrop { background: rgba(15, 23, 42, .45); }
+.calendar-dialog-content { padding: 1.25rem; }
+.calendar-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .5rem;
+  padding: .875rem 1.25rem;
+  border-top: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+}

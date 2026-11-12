@@ -5,6 +5,8 @@ from edc_dashboard.view_mixins import TemplateRequestContextMixin
 
 from django.apps import apps as django_apps
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
+from ...access import visible_employees
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.shortcuts import redirect
@@ -36,6 +38,16 @@ class CalendarView(TimesheetMixin, NavbarViewMixin, EdcBaseViewMixin,
 
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
+        employee_id = self.kwargs.get('employee_id')
+        if not employee_id and self.user_employee:
+            employee_id = self.user_employee.identifier
+        if not visible_employees(self.request.user).filter(identifier=employee_id).exists():
+            raise PermissionDenied('You cannot view timesheets for this employee.')
+        if not self.kwargs.get('year') or not self.kwargs.get('month') or not self.kwargs.get('employee_id'):
+            today = get_utcnow()
+            url = reverse(self.success_url, args=[employee_id, today.year, today.month])
+            suffix = '?' + self.request.GET.urlencode() if self.request.GET else ''
+            return redirect(url + suffix)
         return super().dispatch(*args, **kwargs)
 
     def get(self, request, *args, **kwargs):
