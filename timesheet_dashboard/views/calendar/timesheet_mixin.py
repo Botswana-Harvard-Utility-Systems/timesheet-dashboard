@@ -83,13 +83,13 @@ class TimesheetMixin:
         return user.email == supervisor_email
 
     def _is_hr(self, user):
-        return user.groups.filter(name='HR').exists()
+        return user.is_superuser or user.groups.filter(name='HR').exists()
 
     def _reviewer(self, user):
         in_group = user.groups.filter(
             name__in=['Supervisor', 'HR']).exists()
 
-        return in_group
+        return user.is_superuser or in_group
 
     def _target_employee(self, request):
         """ Return employee instance for request user if not
@@ -105,7 +105,7 @@ class TimesheetMixin:
 
     def _change_calendar_mode(self, request):
         target_employee = self._target_employee(request)
-        is_owner = (target_employee.id == self.user_employee.id)
+        is_owner = bool(target_employee and self.user_employee and target_employee.id == self.user_employee.id)
         is_reviewer = (not is_owner) and self._reviewer(request.user)
 
         return is_owner, is_reviewer

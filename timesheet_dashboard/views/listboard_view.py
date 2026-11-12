@@ -1,33 +1,31 @@
-from datetime import datetime, date
+from datetime import datetime
+from functools import cached_property
+
+from django.apps import apps
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
+from django.db.models import Q
+from django.http import Http404, HttpResponseBadRequest, HttpResponseRedirect
+from django.urls import reverse
+from django.utils.decorators import method_decorator
 from edc_base.utils import get_utcnow
 from edc_base.view_mixins import EdcBaseViewMixin
 from edc_dashboard.view_mixins import ListboardFilterViewMixin, SearchFormViewMixin
-from edc_dashboard.views import ListboardView
-import re
-
-from django.apps import apps as django_apps
-from django.contrib.auth.decorators import login_required
-from django.db.models import Q
-from django.db.models.constants import LOOKUP_SEP
-from django.http.response import HttpResponseRedirect
-from django.utils.decorators import method_decorator
-
+from edc_dashboard.views import ListboardView as BaseListboardView
 from edc_navbar import NavbarViewMixin
+from timesheet.choices import STATUS
 
+from ..access import is_hr, is_supervisor, visible_employees
 from ..model_wrappers import MonthlyEntryModelWrapper
 from .filters import ListboardViewFilters
 
 
 class ListboardView(EdcBaseViewMixin, NavbarViewMixin,
-                    ListboardFilterViewMixin, SearchFormViewMixin,
-                    ListboardView):
-
-    supervisor_queryset_lookups = []
+                    ListboardFilterViewMixin, SearchFormViewMixin, BaseListboardView):
     listboard_template = 'timesheet_listboard_template'
     listboard_url = 'timesheet_listboard_url'
     listboard_panel_style = 'success'
     listboard_fa_icon = 'fa fa-list-alt'
-
     model = 'timesheet.monthlyentry'
     model_wrapper_cls = MonthlyEntryModelWrapper
     listboard_view_filters = ListboardViewFilters()
@@ -37,141 +35,103 @@ class ListboardView(EdcBaseViewMixin, NavbarViewMixin,
 
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
+        if self.request.GET.get('status') and self.request.GET['status'] not in dict(STATUS):
+            raise Http404('Unknown timesheet status.')
+        # Evaluate permissions before rendering either a list or a POST response.
+        self.review_role
+        if self.selected_employee_id and not visible_employees(self.request.user).filter(
+                identifier=self.selected_employee_id).exists():
+            raise PermissionDenied('You cannot view timesheets for this employee.')
         return super().dispatch(*args, **kwargs)
+
+    @cached_property
+    def own_employee(self):
+        return apps.get_model('bhp_personnel.employee').objects.filter(
+            email__iexact=self.request.user.email).first()
+
+    @property
+    def selected_employee_id(self):
+        value = self.kwargs.get('employee_id') or self.request.GET.get('employee_id')
+        return None if value in (None, '', 'None', 'null') else value
+
+    @cached_property
+    def review_role(self):
+        requested = self.request.GET.get('p_role')
+        user = self.request.user
+        if requested == 'HR':
+            if not is_hr(user):
+                raise PermissionDenied('HR access is required.')
+            return 'HR'
+        if requested == 'Supervisor':
+            if not is_supervisor(user):
+                raise PermissionDenied('Supervisor access is required.')
+            return 'Supervisor'
+        if self.selected_employee_id and (
+                not self.own_employee or self.selected_employee_id != self.own_employee.identifier):
+            if is_hr(user):
+                return 'HR'
+            if is_supervisor(user):
+                return 'Supervisor'
+        return ''
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.review_role:
+            employees = visible_employees(
+                self.request.user, team_only=self.review_role == 'Supervisor')
+        else:
+            employees = visible_employees(self.request.user).filter(
+                pk=self.own_employee.pk) if self.own_employee else visible_employees(self.request.user).none()
+        queryset = queryset.filter(employee__in=employees)
+        if self.selected_employee_id:
+            queryset = queryset.filter(employee__identifier=self.selected_employee_id)
+        status = self.request.GET.get('status')
+        if status:
+            queryset = queryset.filter(status=status)
+        if self.request.GET.get('dept'):
+            queryset = queryset.filter(employee__department__dept_name=self.request.GET['dept'])
+        return queryset.select_related('employee', 'employee__supervisor').order_by('-month', 'employee__last_name', 'pk')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-
-        if self.get_employee:
-            model_obj = self.model_cls(employee=self.get_employee)
-        else:
-            model_obj = self.model_cls()
-
-        groups = [g.name for g in self.request.user.groups.all()]
-        timesheet_add_url = None
-
-        if not bool(self.request.GET) or self.request.GET.get('p_role') not in groups:
-            timesheet_add_url = self.model_wrapper_cls(model_obj=model_obj).href
-
-        p_role = self.request.GET.get('p_role')
-
-        employee_id = self.request.GET.get('employee_id') or self.kwargs.get('employee_id')
-        querystring = f'?p_role={p_role}'
-        dept = self.request.GET.get('dept')
-        q = self.request.GET.get('q')
-
-        if employee_id:
-            querystring = querystring + f'&&employee_id={employee_id}'
-
-        if dept:
-            querystring = querystring + f'&&dept={dept}'
-
-        if q:
-            querystring = querystring + f'&&q={q}'
-
+        employee_id = self.selected_employee_id
+        if not self.review_role and self.own_employee:
+            employee_id = self.own_employee.identifier
+        now = get_utcnow()
+        can_add = bool(self.own_employee and employee_id == self.own_employee.identifier and not self.review_role)
+        add_url = reverse('timesheet_dashboard:timesheet_calendar_table_url',
+                          args=[employee_id, now.year, now.month]) if can_add else None
+        selected_employee = visible_employees(self.request.user).filter(identifier=employee_id).first() if employee_id else None
+        title = 'All Employee Timesheets' if self.review_role == 'HR' else (
+            'Team Timesheets' if self.review_role == 'Supervisor' else 'My Timesheets')
         context.update(
-            p_role=p_role,
-            groups=groups,
-            departments=self.departments,
-            employee_id=employee_id,
-            employee=self.get_employee,
-            supervisor_obj=self.supervisor_obj,
-            timesheet_add_url=timesheet_add_url,
-            curr_year=get_utcnow().year,
-            curr_month=get_utcnow().month,
-            querystring=querystring)
+            p_role=self.review_role, timesheet_title=title, employee_id=employee_id,
+            selected_employee=selected_employee, timesheet_add_url=add_url,
+            selected_status=self.request.GET.get('status', ''), status_choices=STATUS,
+            selected_department=self.request.GET.get('dept', ''),
+            selected_search=self.request.GET.get('q', ''),
+            departments=visible_employees(self.request.user).order_by('department__dept_name').values_list(
+                'department__dept_name', flat=True).distinct(),
+            groups=list(self.request.user.groups.values_list('name', flat=True)),
+            querystring=('?' + self.request.GET.urlencode()) if self.request.GET else '')
         return context
 
     def post(self, request, *args, **kwargs):
-        if request.method == 'POST':
-            month = self.request.GET.get('month')
-            year = self.request.GET.get('year')
-            try:
-                monthly_entry_obj = self.model_cls.objects.get(
-                    employee__identifier=self.kwargs['employee_id'],
-                    month=datetime.strptime(f'{year}-{month}-1', '%Y-%m-%d'))
-            except self.model_cls.DoesNotExist:
-                pass
-            else:
-                monthly_entry_obj.status = 'submitted'
-                monthly_entry_obj.submitted_datetime = get_utcnow()
-                monthly_entry_obj.save()
-
-        return HttpResponseRedirect(self.request.path)
-
-    @property
-    def get_employee(self):
-        employee_cls = django_apps.get_model('bhp_personnel.employee')
-
+        if not self.own_employee or self.selected_employee_id != self.own_employee.identifier:
+            raise PermissionDenied('You can only submit your own timesheet.')
         try:
-            employee_obj = employee_cls.objects.get(email=self.request.user.email)
-        except employee_cls.DoesNotExist:
-            return None
-        except employee_cls.MultipleObjectsReturned:
-            return None
-        else:
-            return employee_obj
-
-    @property
-    def departments(self):
-        department_cls = django_apps.get_model('bhp_personnel.department')
-
-        return [dept.dept_name for dept in department_cls.objects.all()]
-
-    @property
-    def supervisor_cls(self):
-        return django_apps.get_model('bhp_personnel.supervisor')
-
-    @property
-    def supervisor_obj(self):
-        supervisor_obj = self.supervisor_cls.objects.filter(
-            email=self.request.user.email).exists()
-        return supervisor_obj
-
-    @property
-    def supervisor_lookup_prefix(self):
-        supervisor_lookup_prefix = LOOKUP_SEP.join(self.supervisor_queryset_lookups)
-        return f'{supervisor_lookup_prefix}__' if supervisor_lookup_prefix else ''
-
-    def get_queryset_filter_options(self, request, *args, **kwargs):
-        options = super().get_queryset_filter_options(request, *args, **kwargs)
-        usr_groups = [g.name for g in self.request.user.groups.all()]
-
-        if self.kwargs.get('employee_id') or self.request.GET.get('employee_id'):
-            options.update({'employee__identifier': self.kwargs.get('employee_id')
-                            or self.request.GET.get('employee_id')})
-
-        elif ('Supervisor' in usr_groups and request.GET.get('p_role') == 'Supervisor'):
-
-            try:
-                supervisor_obj = self.supervisor_cls.objects.get(email=self.request.user.email)
-            except self.supervisor_cls.DoesNotExist:
-                options.update({'user_created': None})
-            else:
-                options.update(
-                    {f'{self.supervisor_lookup_prefix}employee__supervisor': supervisor_obj})
-
-        return options
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        usr_groups = [g.name for g in self.request.user.groups.all()]
-        if (('Supervisor' in usr_groups and self.request.GET.get('p_role')
-             == 'Supervisor') or ('HR' in usr_groups and self.request.GET.get('p_role')
-                                  == 'HR')):
-            qs = qs.filter(
-                status__in=['approved', 'verified', 'rejected', 'submitted'],
-                month__gte=date(2022, 7, 1))
-
-        if self.request.GET.get('dept'):
-            usr_groups = [g.name for g in self.request.user.groups.all()]
-
-            if 'HR' in usr_groups and self.request.GET.get('p_role') == 'HR':
-                qs = qs.filter(employee__department__dept_name=self.request.GET.get('dept'))
-        return qs.order_by('-month')
+            month = datetime.strptime(f"{request.GET.get('year')}-{request.GET.get('month')}-1", '%Y-%m-%d').date()
+        except ValueError:
+            return HttpResponseBadRequest('Choose a valid month and year.')
+        entry = self.model_cls.objects.filter(employee=self.own_employee, month=month).first()
+        if entry and entry.status in ('draft', 'new', 'rejected'):
+            entry.status = 'submitted'
+            entry.submitted_datetime = get_utcnow()
+            entry.save()
+        suffix = '?' + request.GET.urlencode() if request.GET else ''
+        return HttpResponseRedirect(request.path + suffix)
 
     def extra_search_options(self, search_term):
-        q = Q()
-        if re.match('^[A-Z]+$', search_term):
-            q = Q(first_name__exact=search_term)
-        return q
+        return (Q(employee__first_name__icontains=search_term)
+                | Q(employee__last_name__icontains=search_term)
+                | Q(employee__email__icontains=search_term))
