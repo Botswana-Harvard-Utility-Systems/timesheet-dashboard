@@ -1,77 +1,68 @@
 {% extends listboard_base_template %}
-{% load admin_urls %}
-{% load edc_base_extras %}
-{% load timesheet_dashboard_extras %}
-{% load edc_dashboard_extras %}
+{% load timesheet_dashboard_extras edc_dashboard_extras %}
 
 {% block main %}
-
-<div class="row g-3">
-	 <div class="d-flex align-items-center justify-content-between mb-3">
-    	<div>
-      		<h1 class="h4 mb-0">{{breadcrumb_title|capfirst}} Timesheets</h1>
-
-      		<nav aria-label="breadcrumb" class="small">
-	          <ol class="breadcrumb mb-0">
-	            <li class="breadcrumb-item"><a href="{% url 'timesheet:timesheet_home_url' %}">Timesheet Dashboard</a></li>
-	            <li class="breadcrumb-item active">{{breadcrumb_title|capfirst}} Timesheets</li>
-	          </ol>
-	        </nav>
-        </div>
-        {% block listboard_search_form %}
-        	{% include 'timesheet_dashboard/search_form.html' %}
-      	{% endblock listboard_search_form %}
+<div class="utility-list-page">
+  <header class="list-heading">
+    <div>
+      <h1>{{ breadcrumb_title|capfirst }} Timesheets</h1>
+      <nav aria-label="Breadcrumb" class="small text-secondary">
+        <a href="{% url 'timesheet:timesheet_home_url' %}">Timesheet Dashboard</a>
+        / {{ breadcrumb_title|capfirst }} Timesheets
+      </nav>
     </div>
-	    <div class="table-responsive border border-primary border-opacity-25 rounded-start rounded-end p-0">
-	    	<table class="table table-hover small align-middle table-sm">
-	    		<thead class="table-primary p-2">
-	    			{% block listboard_table_header %}
-	    				<tr>
-	    					<th>#</th>
-					        <th></th>
-					        <th>Employee Code</th>
-					        <th>Employee Name</th>
-					        <th>Email</th>
-					        <th>Job Title</th>
-						</tr>
-		   			{% endblock listboard_table_header %}
-				</thead>
-				<tbody>
-					{% block listboard_table_body %}
-						{% for result in results %}
-							<tr>
-								<td>{{ forloop.counter }}</td>
-								{% block listboard_table_button_column %}
-								<td style="white-space: nowrap;">
-									<div class="btn-group" role="group" aria-label="Employee Links">
-								       {% timesheets_button result p_role request.user %}
-								    </div>
-								</td>
-								{% endblock listboard_table_button_column %}
-	
-								{% block listboard_table_columns %}
-				
-								    <td>{{ result.employee_code }} </td>
-								    <td nowrap>{{ result.first_name }} {{ result.middle_name }} {{ result.last_name }}</td>
-								    <td nowrap>{{ result.email }}</td>
-								    <td nowrap>{{ result.job_title }}</td>
-								
-								{% endblock listboard_table_columns %}
-							</tr>
-						{% empty %}
-						<tr>
-							<td colspan="9" class="text-center text-secondary">No employees found.</td>
-						</tr>
-						{% endfor %}
-					{% endblock listboard_table_body %}
-				</tbody>
-	    	</table>
-	    	<div class="d-flex flex-column align-items-center">
-	    		{% paginator_row %}
-	    	</div>
-	    </div>
-	   
+  </header>
+
+  <section class="list-card" aria-label="Employee timesheets">
+    <div class="list-toolbar">
+      <div class="list-search">
+        {% block listboard_search_form %}
+          {% include 'timesheet_dashboard/search_form.html' %}
+        {% endblock listboard_search_form %}
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-hover align-middle list-table">
+        <thead>
+          {% block listboard_table_header %}
+          <tr>
+            <th scope="col">Employee code</th>
+            <th scope="col">Employee name</th>
+            <th scope="col">Email</th>
+            <th scope="col">Job title</th>
+            <th scope="col" class="text-end">Action</th>
+          </tr>
+          {% endblock listboard_table_header %}
+        </thead>
+        <tbody>
+          {% block listboard_table_body %}
+            {% for result in results %}
+              <tr>
+                {% block listboard_table_columns %}
+                  <td class="list-muted">{{ result.employee_code }}</td>
+                  <td class="list-primary">{{ result.first_name }} {{ result.middle_name|default_if_none:'' }} {{ result.last_name }}</td>
+                  <td>{{ result.email }}</td>
+                  <td>{{ result.job_title }}</td>
+                {% endblock listboard_table_columns %}
+                {% block listboard_table_button_column %}
+                  <td class="text-end text-nowrap">
+                    {% timesheets_button result p_role request.user %}
+                  </td>
+                {% endblock listboard_table_button_column %}
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="text-center text-secondary py-5">No employees found.</td></tr>
+            {% endfor %}
+          {% endblock listboard_table_body %}
+        </tbody>
+      </table>
+    </div>
+
+    <footer class="list-footer">
+      <span>{{ paginator.count }} employee{{ paginator.count|pluralize }}</span>
+      {% if is_paginated %}<div>{% paginator_row %}</div>{% endif %}
+    </footer>
+  </section>
 </div>
-
 {% endblock main %}
-
